@@ -95,7 +95,7 @@ setup_nginx
 
 # change solr/tomcat port to 8983
 perl -i -pe 's/8080/8983/'  /etc/tomcat6/server.xml
-cp $OL_ROOT/conf/solr/conf/schema.xml /etc/solr/conf/
+ln -sf $OL_ROOT/conf/solr/conf/schema.xml /etc/solr/conf/schema.xml
 /etc/init.d/tomcat6 restart
 
 mkdir -p /var/log/openlibrary /var/lib/openlibrary
