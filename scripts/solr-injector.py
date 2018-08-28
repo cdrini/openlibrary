@@ -172,7 +172,7 @@ def insert_work(work):
             solr_doc['seed'] += [prefix + s for s in solr_doc[field + '_key']]
 
     # Add authors to seed
-    solr_doc['seed'] += solr_doc['author_key']
+    solr_doc['seed'] += solr_doc.get('author_key', [])
 
     solr_doc['has_fulltext'] = False
     solr_doc['edition_count'] = 0
