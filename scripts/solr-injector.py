@@ -412,6 +412,9 @@ if __name__ == "__main__":
 
     solr = Solr(args.solr_endpoint)
 
+    # maintain a connection for improved performance
+    solr.connect()
+
     for line in sys.stdin:
         thing = json.loads(line.strip())
         if thing['key'].startswith('/authors/'):
@@ -433,3 +436,4 @@ if __name__ == "__main__":
         #         update_work_w_edition(thing, work_solr_doc)
 
     solr.commit()
+    solr.disconnect()
