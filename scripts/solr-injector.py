@@ -415,11 +415,15 @@ if __name__ == "__main__":
     # maintain a connection for improved performance
     solr.connect()
 
+    chunk = []
     for line in sys.stdin:
         thing = json.loads(line.strip())
         if thing['key'].startswith('/authors/'):
             solr_doc = insert_author(thing)
-            solr.update([UpdateRequest(solr_doc)], commit_within=5*60*1000)
+            chunk += [UpdateRequest(solr_doc)]
+            if len(chunk) == 250:
+                solr.update(chunk, commit_within=5*60*1000)
+                chunk = []
         else:
             logger.error("Unknown type: " + thing['key'])
         # elif thing['key'].startswith('/works/'):
@@ -435,5 +439,7 @@ if __name__ == "__main__":
         #         work_solr_doc = insert_work(thing)
         #         update_work_w_edition(thing, work_solr_doc)
 
+    if chunk:
+        solr.update(chunk, commit_within=5*60*1000)
     solr.commit()
     solr.disconnect()
