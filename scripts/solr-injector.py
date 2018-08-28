@@ -418,14 +418,19 @@ if __name__ == "__main__":
     chunk = []
     for line in sys.stdin:
         thing = json.loads(line.strip())
+        solr_doc = None
         if thing['key'].startswith('/authors/'):
             solr_doc = insert_author(thing)
+        elif thing['key'].startswith('/works/'):
+            solr_doc = insert_work(thing)
+        else:
+            logger.error("Unknown type: " + thing['key'])
+
+        if solr_doc:
             chunk += [UpdateRequest(solr_doc)]
             if len(chunk) == 250:
                 solr.update(chunk, commit_within=5*60*1000)
                 chunk = []
-        else:
-            logger.error("Unknown type: " + thing['key'])
         # elif thing['key'].startswith('/works/'):
         #     insert_work(thing)
         # elif thing['key'].startswith('/books/'):
