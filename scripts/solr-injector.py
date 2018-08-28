@@ -419,12 +419,16 @@ if __name__ == "__main__":
     for line in sys.stdin:
         thing = json.loads(line.strip())
         solr_doc = None
-        if thing['key'].startswith('/authors/'):
-            solr_doc = insert_author(thing)
-        elif thing['key'].startswith('/works/'):
-            solr_doc = insert_work(thing)
-        else:
-            logger.error("Unknown type: " + thing['key'])
+        try:
+            if thing['key'].startswith('/authors/'):
+                solr_doc = insert_author(thing)
+            elif thing['key'].startswith('/works/'):
+                solr_doc = insert_work(thing)
+            else:
+                logger.error("Unknown type: " + thing['key'])
+        except:
+            print("Error for key: %s" % thing['key'])
+            raise
 
         if solr_doc:
             chunk += [UpdateRequest(solr_doc)]
