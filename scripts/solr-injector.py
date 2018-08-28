@@ -416,6 +416,18 @@ if __name__ == "__main__":
     # maintain a connection for improved performance
     solr.connect()
 
+
+    def solr_update(docs):
+        try:
+            solr.update(docs, commit_within=5 * 60 * 1000)
+        except ValueError:
+            # do each one manually
+            for doc in docs:
+                try:
+                    solr.update([doc], commit_within=5 * 60 * 1000)
+                except ValueError:
+                    print("ValueError for key: %s; skipping" % doc['key'])
+
     chunk = []
     for line in sys.stdin:
         thing = json.loads(line.strip())
@@ -435,7 +447,7 @@ if __name__ == "__main__":
         if solr_doc:
             chunk += [UpdateRequest(solr_doc)]
             if len(chunk) == 250:
-                solr.update(chunk, commit_within=5*60*1000)
+                solr_update(chunk)
                 chunk = []
         # elif thing['key'].startswith('/works/'):
         #     insert_work(thing)
@@ -451,6 +463,6 @@ if __name__ == "__main__":
         #         update_work_w_edition(thing, work_solr_doc)
 
     if chunk:
-        solr.update(chunk, commit_within=5*60*1000)
+        solr_update(chunk)
     solr.commit()
     solr.disconnect()
