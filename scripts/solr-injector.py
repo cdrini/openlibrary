@@ -428,6 +428,7 @@ if __name__ == "__main__":
                 logger.error("Unknown type: " + thing['key'])
         except:
             print("Error for key: %s" % thing['key'])
+            print(line)
             raise
 
         if solr_doc:
