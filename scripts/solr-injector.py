@@ -417,16 +417,16 @@ if __name__ == "__main__":
     solr.connect()
 
 
-    def solr_update(docs):
+    def solr_update(requests):
         try:
-            solr.update(docs, commit_within=5 * 60 * 1000)
+            solr.update(requests, commit_within=5 * 60 * 1000)
         except ValueError:
             # do each one manually
-            for doc in docs:
+            for req in requests:
                 try:
-                    solr.update([doc], commit_within=5 * 60 * 1000)
+                    solr.update([req], commit_within=5 * 60 * 1000)
                 except ValueError:
-                    print("ValueError for key: %s; skipping" % doc['key'])
+                    print("ValueError for key: %s; skipping" % req.doc['key'])
 
     chunk = []
     for line in sys.stdin:
