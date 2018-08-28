@@ -1,7 +1,7 @@
 """
 Reads JSON objects on stdin and inserts them into Solr.
 """
-import fileinput
+import sys
 import json
 import logging
 import re
@@ -412,8 +412,8 @@ if __name__ == "__main__":
 
     solr = Solr(args.solr_endpoint)
 
-    for line in fileinput.input():
-        thing = json.loads(line)
+    for line in sys.stdin:
+        thing = json.loads(line.strip())
         if thing['key'].startswith('/authors/'):
             solr_doc = insert_author(thing)
             solr.update([UpdateRequest(solr_doc)], commit_within=5*60*1000)
