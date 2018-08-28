@@ -6,6 +6,11 @@ import re
 to_drop = set(''';/?:@&=+$,<>#%"{}|\\^[]`\n\r''')
 
 def str_to_key(s):
+    """
+    Convert a string to a valid Solr field name.
+    :param str s:
+    :rtype: str
+    """
     return ''.join(c if c != ' ' else '_' for c in s.lower() if c not in to_drop)
 
 def url_quote(s):

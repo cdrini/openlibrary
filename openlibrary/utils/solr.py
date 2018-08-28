@@ -1,11 +1,14 @@
 """Python library for accessing Solr.
 """
-import urlparse
-import urllib, urllib2
-import re
-import web
-import simplejson
+import httplib
 import logging
+import re
+import urllib
+import urllib2
+import urlparse
+
+import simplejson
+import web
 
 logger = logging.getLogger("openlibrary.logger")
 
@@ -30,10 +33,12 @@ def urlencode(d, doseq=False):
 
     return urllib.urlencode(utf8(d), doseq=doseq)
 
+
 class Solr:
     def __init__(self, base_url):
-        self.base_url = base_url
-        self.host = urlparse.urlsplit(self.base_url)[1]
+        self.base_url = base_url  # type: str
+        self.host = urlparse.urlsplit(self.base_url)[1]  # type: str
+        self.http_connection = None  # type: httplib.HTTPConnection
 
     def escape(self, query):
         r"""Escape special characters in the query string
@@ -46,14 +51,87 @@ class Solr:
         pattern = "([%s])" % re.escape(chars)
         return web.re_compile(pattern).sub(r'\\\1', query)
 
+    def connect(self):
+        """
+        Create an http connection to be used for other POST calls. Useful for
+        improving performance.
+        """
+        if self.http_connection:
+            self.http_connection.close()
+
+        self.http_connection = httplib.HTTPConnection(self.base_url)
+        self.http_connection.connect()
+
+    def disconnect(self):
+        """
+        Break any existing HTTP connections
+        """
+        if self.http_connection:
+            self.http_connection.close()
+            self.http_connection = None
+
+    def update(self, requests, commit_within=60000):
+        """
+        Hit Solr's update endpoint to update an item
+        :param list[UpdateRequest or DeleteRequest] requests:
+        :param int commit_within:
+        :return:
+        """
+        url = self.base_url + "/solr/update"
+        if not url.startswith('http'):
+            url = "http://" + url
+        url += "?commitWithin=%d" % commit_within
+
+        if self.http_connection:
+            h1 = self.http_connection
+        else:
+            h1 = httplib.HTTPConnection(self.base_url)
+            h1.connect()
+
+        for r in requests:
+            r = r.toxml()
+
+            assert isinstance(r, basestring)
+            h1.request('POST', url, r.encode('utf8'), {'Content-type': 'text/xml;charset=utf-8'})
+            response = h1.getresponse()
+            response_body = response.read()
+            if response.reason != 'OK':
+                logger.error(response.reason)
+                logger.error(response_body)
+
+        if not self.http_connection:
+            h1.close()
+
+    def commit(self):
+        """
+        Ask Solr to commit any pending changes
+        """
+        url = self.base_url + "/solr/update"
+        if not url.startswith('http'):
+            url = "http://" + url
+        params_str = urlencode({'commit': 'true'})
+        headers = {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}
+        request = urllib2.Request(url, params_str, headers)
+        return urllib2.urlopen(request, timeout=3).read()
+
     def select(self, query, fields=None, facets=None,
                rows=None, start=None,
                doc_wrapper=None, facet_wrapper=None,
                **kw):
-        """Execute a solr query.
+        """
+        Execute a Solr query.
 
-        query can be a string or a dicitonary. If query is a dictionary, query
-        is constucted by concatinating all the key-value pairs with AND condition.
+        :param str or dict query: query is a dictionary, query is constructed
+            by concatenating all the key-value pairs with AND condition
+        :param list[str] fields: solr fields to retrieve
+        :param list[str] or dict facets:
+        :param int rows: number of rows to return
+        :param int start: offset
+        :param fn doc_wrapper:
+        :param fn facet_wrapper:
+        :param dict kw: other param arguments; use '_' inplace of '.' in the keys
+        :return: a response object
+        :rtype: web.storage
         """
         params = {'wt': 'json'}
 
