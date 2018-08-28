@@ -145,7 +145,8 @@ def insert_work(work):
         solr_doc['cover_i'] = work['covers'][0]
 
     if 'authors' in work:
-        solr_doc['author_key'] = [a['author']['key'] for a in work.get('authors', [])]
+        # FIXME: Related to #1059 ; shouldn't need the if check
+        solr_doc['author_key'] = [a['author']['key'] for a in work.get('authors', []) if 'author' in a]
 
     # map openlibrary object fields to solr document fields
     subject_fields_map = {
