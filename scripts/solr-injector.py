@@ -42,6 +42,7 @@ def add_field(doc, name, value):
     try:
         field.text = normalize('NFC', unicode(strip_bad_char(value)))
     except:
+        print('Error in normalizing %r', value)
         logger.error('Error in normalizing %r', value)
         raise
     doc.append(field)
@@ -349,6 +350,7 @@ def update_work_w_edition(solr_doc, edition):
                 ids = [id.strip() for id in ids]
                 solr_doc[solr_field] = uniq(solr_doc.get(solr_field, []) + ids)
             else:
+                print('Bad identifier name: %s for %s', id_name, shortkey)
                 logger.error('Bad identifier name: %s for %s', id_name, shortkey)
 
     for field in 'ia_loaded_id', 'ia_box_id':
@@ -359,6 +361,7 @@ def update_work_w_edition(solr_doc, edition):
             elif isinstance(list_or_str, list) and isinstance(list_or_str[0], basestring):
                 pass
             else:
+                print("UnexpectedType: %s for %s", field, shortkey)
                 logger.error("UnexpectedType: %s for %s", field, shortkey)
                 list_or_str = []
 
@@ -459,6 +462,7 @@ if __name__ == "__main__":
                     update_work_w_edition(solr_doc, thing)
                     solr_docs += [solr_doc]
             else:
+                print("Unknown type: " + thing['key'])
                 logger.error("Unknown type: " + thing['key'])
         except:
             print("Error for key: %s" % thing['key'])
