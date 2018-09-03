@@ -479,7 +479,7 @@ if __name__ == "__main__":
         except BaseException as e:
             sys.stderr.writelines([
                 "Error for key: %s\n" % thing['key'],
-                "Error: %s\n" % e.message(),
+                "Error: %s\n" % e.message,
                 "Thing: %s\n" % line
             ])
 
