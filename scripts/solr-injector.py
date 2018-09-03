@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from unicodedata import normalize
+import traceback
 
 from lxml.etree import Element, tostring
 
@@ -480,6 +481,9 @@ if __name__ == "__main__":
             sys.stderr.writelines([
                 "Error for key: %s\n" % thing['key'],
                 "Error: %s\n" % e.message,
+                "Trace: "])
+            traceback.print_exc()
+            sys.stderr.writelines([
                 "Thing: %s\n" % line
             ])
 
