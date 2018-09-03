@@ -476,9 +476,10 @@ if __name__ == "__main__":
             else:
                 print("Unknown type: " + thing['key'])
                 logger.error("Unknown type: " + thing['key'])
-        except:
+        except BaseException as e:
             sys.stderr.writelines([
                 "Error for key: %s\n" % thing['key'],
+                "Error: %s\n" % e.message(),
                 "Thing: %s\n" % line
             ])
 
