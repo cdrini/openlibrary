@@ -460,9 +460,12 @@ if __name__ == "__main__":
                 works = [w['key'] for w in thing.get('works', [])]
                 if works:
                     for work_key in works:
-                        solr_doc = dict(solr.select(query='key:%s' % work_key).docs[0])
-                        update_work_w_edition(solr_doc, thing)
-                        solr_docs += [solr_doc]
+                        try:
+                            solr_doc = dict(solr.select(query='key:%s' % work_key).docs[0])
+                            update_work_w_edition(solr_doc, thing)
+                            solr_docs += [solr_doc]
+                        except IndexError:
+                            sys.stderr.write("Unable to find %s's work, %s" % (thing['key'], work_key))
                 else:
                     solr_doc = insert_edition_as_work(thing)
                     update_work_w_edition(solr_doc, thing)
