@@ -125,6 +125,13 @@ def update_author_w_works(solr, author_doc):
         author_doc['top_subjects'] = [x.value for x in all_subjects[:10]]
 
 
+def insert_edition_as_work(edition):
+    short_key = edition['key'].split('/')[2]
+    solr_doc = insert_work(edition)
+    solr_doc['key'] = '/works/%s' % short_key
+    return solr_doc
+
+
 def insert_work(work):
     """
     :param dict work: work object to insert
@@ -431,12 +438,25 @@ if __name__ == "__main__":
     chunk = []
     for line in sys.stdin:
         thing = json.loads(line.strip())
-        solr_doc = None
+        solr_docs = []
         try:
             if thing['key'].startswith('/authors/'):
                 solr_doc = insert_author(thing)
+                solr_docs += [solr_doc]
             elif thing['key'].startswith('/works/'):
                 solr_doc = insert_work(thing)
+                solr_docs += [solr_doc]
+            elif thing['key'].startswith('/books/'):
+                works = [w['key'] for w in thing.get('works', [])]
+                if works:
+                    for work_key in works:
+                        solr_doc = solr.select('key:%s' % work_key).docs[0]
+                        update_work_w_edition(solr_doc, thing)
+                        solr_docs += [solr_doc]
+                else:
+                    solr_doc = insert_edition_as_work(thing)
+                    update_work_w_edition(solr_doc, thing)
+                    solr_docs += [solr_doc]
             else:
                 logger.error("Unknown type: " + thing['key'])
         except:
@@ -444,23 +464,11 @@ if __name__ == "__main__":
             print(line)
             raise
 
-        if solr_doc:
-            chunk += [UpdateRequest(solr_doc)]
-            if len(chunk) == 250:
+        if solr_docs:
+            chunk += [UpdateRequest(d) for d in solr_docs]
+            if len(chunk) >= 250:
                 solr_update(chunk)
                 chunk = []
-        # elif thing['key'].startswith('/works/'):
-        #     insert_work(thing)
-        # elif thing['key'].startswith('/books/'):
-        #     # load the solr doc for the work
-        #     if 'works' in thing:
-        #         for work_key in map(lambda x: x['key'], thing['works']):
-        #             work_solr_doc = solr.select(dict(key=work_key))
-        #             update_work_w_edition(thing, work_solr_doc)
-        #     else:
-        #         # Insert as "fake" work with single edition
-        #         work_solr_doc = insert_work(thing)
-        #         update_work_w_edition(thing, work_solr_doc)
 
     if chunk:
         solr_update(chunk)
