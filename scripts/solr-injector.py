@@ -465,7 +465,10 @@ if __name__ == "__main__":
                             update_work_w_edition(solr_doc, thing)
                             solr_docs += [solr_doc]
                         except IndexError:
-                            sys.stderr.write("Unable to find %s's work, %s" % (thing['key'], work_key))
+                            sys.stderr.writelines([
+                                "Unable to find %s's work, %s" % (thing['key'], work_key),
+                                "Thing: " + line
+                            ])
                 else:
                     solr_doc = insert_edition_as_work(thing)
                     update_work_w_edition(solr_doc, thing)
@@ -474,9 +477,10 @@ if __name__ == "__main__":
                 print("Unknown type: " + thing['key'])
                 logger.error("Unknown type: " + thing['key'])
         except:
-            print("Error for key: %s" % thing['key'])
-            print(line)
-            raise
+            sys.stderr.writelines([
+                "Error for key: %s\n" % thing['key'],
+                "Thing: " + line
+            ])
 
         if solr_docs:
             chunk += [UpdateRequest(d) for d in solr_docs]
