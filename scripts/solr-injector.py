@@ -289,7 +289,7 @@ def update_work_w_edition(solr_doc, edition):
         'oclc_numbers': 'oclc',
         'contributions': 'contributor',
     }
-    for ol_field, solr_field in field_map:
+    for ol_field, solr_field in field_map.iteritems():
         if ol_field in edition:
             solr_doc[solr_field] = uniq(solr_doc.get(solr_field, []) + edition[ol_field])
 
