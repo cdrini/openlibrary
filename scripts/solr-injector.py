@@ -454,8 +454,8 @@ if __name__ == "__main__":
                 if works:
                     for work_key in works:
                         solr_doc = solr.select(query='key:%s' % work_key).docs[0]
-                        print(solr_doc)
                         update_work_w_edition(solr_doc, thing)
+                        print(solr_doc)
                         solr_docs += [solr_doc]
                 else:
                     solr_doc = insert_edition_as_work(thing)
