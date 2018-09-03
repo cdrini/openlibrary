@@ -267,7 +267,7 @@ def update_work_w_edition(solr_doc, edition):
         'subtitle': 'alternative_subtitle',
     }
     for ol_field, solr_field in title_field_map.iteritems():
-        if ol_field in edition and edition[ol_field] not in set([solr_doc[ol_field]] + solr_doc.get(solr_field, [])):
+        if ol_field in edition and edition[ol_field] not in set([solr_doc.get(ol_field, '')] + solr_doc.get(solr_field, [])):
             solr_doc[solr_field] = solr_doc.get(solr_field, []) + [edition[ol_field]]
 
     solr_doc['edition_count'] += 1
