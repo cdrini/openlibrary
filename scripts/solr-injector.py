@@ -263,6 +263,11 @@ def update_work_w_authors(solr, work_doc):
 def update_work_w_edition(solr_doc, edition):
     shortkey = edition['key'].split("/")[2]
 
+    if 'title_suggest' in solr_doc:
+        del solr_doc['title_suggest']
+    if 'text' in solr_doc:
+        del solr_doc['text']
+
     title_field_map = {
         'title': 'alternative_title',
         'subtitle': 'alternative_subtitle',
