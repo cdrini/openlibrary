@@ -164,7 +164,7 @@ class Solr:
         # switch to POST request when the payload is too big.
         # XXX: would it be a good idea to swithc to POST always?
         payload = urlencode(params, doseq=True)
-        url = self.base_url + "/select"
+        url = self.base_url + "/solr/select"
         if not url.startswith('http'):
             url = "http://" + url
         if len(payload) < 500:
