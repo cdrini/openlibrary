@@ -276,8 +276,6 @@ def update_work_w_edition(solr_doc, edition):
         if ol_field in edition and edition[ol_field] not in set([solr_doc.get(ol_field, '')] + solr_doc.get(solr_field, [])):
             solr_doc[solr_field] = solr_doc.get(solr_field, []) + [edition[ol_field]]
 
-    solr_doc['edition_count'] += 1
-
     if 'by_statement' in edition:
         solr_doc['by_statement'] = uniq(solr_doc.get('by_statement', []) + [edition['by_statement']])
 
@@ -308,10 +306,14 @@ def update_work_w_edition(solr_doc, edition):
     if last_modified_i > solr_doc['last_modified_i']:
         solr_doc['last_modified_i'] = last_modified_i
 
+    if edition['key'] not in solr_doc['seed']:
+        solr_doc['edition_count'] += 1
+
     if 'ocaid' in edition:
         solr_doc['has_fulltext'] = True
-        solr_doc['ebook_count_i'] += 1
-        solr_doc['ia'] = uniq(solr_doc.get('ia', []) + edition['ocaid'])
+        if edition['ocaid'] not in solr_doc.get('ia', []):
+            solr_doc['ebook_count_i'] += 1
+        solr_doc['ia'] = uniq(solr_doc.get('ia', []) + [edition['ocaid']])
 
         solr_doc['public_scan_b'] = solr_doc['public_scan_b'] or 'public_scan' in edition
 
@@ -373,7 +375,7 @@ def update_work_w_edition(solr_doc, edition):
             if list_or_str:
                 solr_doc[field] = uniq(solr_doc.get(field, []) + list_or_str)
 
-    solr_doc['seed'] += [edition['key']]
+    solr_doc['seed'] = uniq(solr_doc['seed'] + [edition['key']])
 
 
 re_solr_field_underscore = re.compile('[.,:]')
