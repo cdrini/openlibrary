@@ -96,6 +96,8 @@ class Solr:
             response = h1.getresponse()
             response_body = response.read()
             if response.reason != 'OK':
+                print(response.reason)
+                print(response_body)
                 logger.error(response.reason)
                 logger.error(response_body)
 
