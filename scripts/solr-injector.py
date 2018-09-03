@@ -297,7 +297,7 @@ def update_work_w_edition(solr_doc, edition):
     if 'isbn_10' in edition or 'isbn_13' in edition:
         new_isbns = get_isbns(edition)
         old_isbns = set(solr_doc.get('isbns', []))
-        solr_doc['isbns'] = list(old_isbns.union(new_isbns))
+        solr_doc['isbn'] = list(old_isbns.union(new_isbns))
 
     last_modified_i = datetimestr_to_int(edition['last_modified'])
     if last_modified_i > solr_doc['last_modified_i']:
