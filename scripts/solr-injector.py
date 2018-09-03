@@ -434,6 +434,7 @@ if __name__ == "__main__":
             # do each one manually
             for req in requests:
                 try:
+                    print(req.toxml())
                     solr.update([req], commit_within=5 * 60 * 1000)
                 except ValueError:
                     print("ValueError for key: %s; skipping" % req.doc['key'])
