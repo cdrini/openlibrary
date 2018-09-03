@@ -169,10 +169,10 @@ class Solr:
             url = "http://" + url
         if len(payload) < 500:
             url = url + "?" + payload
-            # logger.info("solr request: %s", url)
+            logger.info("solr request: %s", url)
             data = urllib2.urlopen(url, timeout=3).read()
         else:
-            # logger.info("solr request: %s ...", url)
+            logger.info("solr request: %s ...", url)
             request = urllib2.Request(url, payload, {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"})
             data = urllib2.urlopen(request, timeout=3).read()
         return self._parse_solr_result(
