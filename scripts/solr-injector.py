@@ -466,8 +466,8 @@ if __name__ == "__main__":
                             solr_docs += [solr_doc]
                         except IndexError:
                             sys.stderr.writelines([
-                                "Unable to find %s's work, %s" % (thing['key'], work_key),
-                                "Thing: " + line
+                                "Unable to find %s's work, %s\n" % (thing['key'], work_key),
+                                "Thing: %s\n" % line
                             ])
                 else:
                     solr_doc = insert_edition_as_work(thing)
@@ -479,7 +479,7 @@ if __name__ == "__main__":
         except:
             sys.stderr.writelines([
                 "Error for key: %s\n" % thing['key'],
-                "Thing: " + line
+                "Thing: %s\n" % line
             ])
 
         if solr_docs:
