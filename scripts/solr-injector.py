@@ -429,12 +429,12 @@ if __name__ == "__main__":
 
     def solr_update(requests):
         try:
+            print(req.toxml() for req in requests)
             solr.update(requests, commit_within=5 * 60 * 1000)
         except ValueError:
             # do each one manually
             for req in requests:
                 try:
-                    print(req.toxml())
                     solr.update([req], commit_within=5 * 60 * 1000)
                 except ValueError:
                     print("ValueError for key: %s; skipping" % req.doc['key'])
