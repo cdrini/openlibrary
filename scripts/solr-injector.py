@@ -450,7 +450,8 @@ if __name__ == "__main__":
                 works = [w['key'] for w in thing.get('works', [])]
                 if works:
                     for work_key in works:
-                        solr_doc = solr.select('key:%s' % work_key).docs[0]
+                        solr_doc = solr.select(query='key:%s' % work_key).docs[0]
+                        print(solr_doc)
                         update_work_w_edition(solr_doc, thing)
                         solr_docs += [solr_doc]
                 else:
