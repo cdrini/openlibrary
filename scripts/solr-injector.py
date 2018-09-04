@@ -430,9 +430,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     solr = Solr(args.solr_endpoint)
-
-    # maintain a connection for improved performance
-    solr.connect()
+    connected = False
 
 
     def solr_update(requests):
@@ -448,6 +446,10 @@ if __name__ == "__main__":
 
     chunk = []
     for line in sys.stdin:
+        if not connected:
+            # maintain a connection for improved performance
+            solr.connect()
+
         thing = json.loads(line.strip())
         solr_docs = []
         try:
