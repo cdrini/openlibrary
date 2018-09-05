@@ -453,32 +453,41 @@ if __name__ == "__main__":
         thing = json.loads(line.strip())
         solr_docs = []
         try:
-            if thing['key'].startswith('/authors/'):
-                solr_doc = insert_author(thing)
-                solr_docs += [solr_doc]
-            elif thing['key'].startswith('/works/'):
-                solr_doc = insert_work(thing)
-                solr_docs += [solr_doc]
-            elif thing['key'].startswith('/books/'):
-                works = [w['key'] for w in thing.get('works', [])]
-                if works:
-                    for work_key in works:
-                        try:
-                            solr_doc = dict(solr.select(query='key:%s' % work_key).docs[0])
-                            update_work_w_edition(solr_doc, thing)
-                            solr_docs += [solr_doc]
-                        except IndexError:
-                            sys.stderr.writelines([
-                                "Unable to find %s's work, %s\n" % (thing['key'], work_key),
-                                "Thing: %s\n" % line
-                            ])
-                else:
-                    solr_doc = insert_edition_as_work(thing)
-                    update_work_w_edition(solr_doc, thing)
+            if args.action is 'insert':
+                if thing['key'].startswith('/authors/'):
+                    solr_doc = insert_author(thing)
                     solr_docs += [solr_doc]
-            else:
-                print("Unknown type: " + thing['key'])
-                logger.error("Unknown type: " + thing['key'])
+                elif thing['key'].startswith('/works/'):
+                    solr_doc = insert_work(thing)
+                    solr_docs += [solr_doc]
+                elif thing['key'].startswith('/books/'):
+                    works = [w['key'] for w in thing.get('works', [])]
+                    if works:
+                        for work_key in works:
+                            try:
+                                solr_doc = dict(solr.select(query='key:%s' % work_key).docs[0])
+                                update_work_w_edition(solr_doc, thing)
+                                solr_docs += [solr_doc]
+                            except IndexError:
+                                sys.stderr.writelines([
+                                    "Unable to find %s's work, %s\n" % (thing['key'], work_key),
+                                    "Thing: %s\n" % line
+                                ])
+                    else:
+                        solr_doc = insert_edition_as_work(thing)
+                        update_work_w_edition(solr_doc, thing)
+                        solr_docs += [solr_doc]
+                else:
+                    print("Unknown type: " + thing['key'])
+                    logger.error("Unknown type: " + thing['key'])
+            elif args.action is 'update':
+                if thing['key'].startswith('/authors/'):
+                    solr_doc = dict(solr.select(query='key:%s' % thing['key']).docs[0])
+                    update_author_w_works(solr, solr_doc)
+                    solr_docs += [solr_doc]
+                else:
+                    print("Unknown type: " + thing['key'])
+                    logger.error("Unknown type: " + thing['key'])
         except BaseException as e:
             sys.stderr.writelines([
                 "Error for key: %s\n" % thing['key'],
