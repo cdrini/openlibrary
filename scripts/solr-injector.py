@@ -260,7 +260,7 @@ def update_work_w_authors(solr, work_doc):
     )
 
     work_doc['author_name'] = [a.name for a in resp.docs]
-    work_doc['author_alternative_name'] = [n for a in resp.docs for n in a.alternative_name]
+    work_doc['author_alternative_name'] = [n for a in resp.docs for n in a.get('alternative_name', [])]
     work_doc['author_facet'] = [' '.join(v) for v in zip(work_doc['author_key'], work_doc['author_name'])]
 
 
