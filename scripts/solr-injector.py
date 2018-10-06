@@ -247,10 +247,15 @@ def update_work_w_editions(work_doc, editions):
 
 
 def update_work_w_authors(solr, work_doc):
+    """
+    :param Solr solr:
+    :param dict work_doc: solr work doc
+    :rtype: None
+    """
     if 'author_key' not in work_doc:
         return
     resp = solr.select(
-        query=' OR '.join(['author_key:' + key for key in work_doc['author_key']]),
+        query=' OR '.join(['key:' + key for key in work_doc['author_key']]),
         fields=['name', 'alternative_name']
     )
 
