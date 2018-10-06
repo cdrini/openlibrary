@@ -80,8 +80,6 @@ def dict2element(d):
     return doc
 
 
-
-
 def insert_author(author):
     """
     :param dict author: author object to insert
@@ -453,7 +451,7 @@ if __name__ == "__main__":
         thing = json.loads(line.strip())
         solr_docs = []
         try:
-            if args.action is 'insert':
+            if args.action == 'insert':
                 if thing['key'].startswith('/authors/'):
                     solr_doc = insert_author(thing)
                     solr_docs += [solr_doc]
@@ -480,10 +478,15 @@ if __name__ == "__main__":
                 else:
                     print("Unknown type: " + thing['key'])
                     logger.error("Unknown type: " + thing['key'])
-            elif args.action is 'update':
+            elif args.action == 'update':
                 if thing['key'].startswith('/authors/'):
                     solr_doc = dict(solr.select(query='key:%s' % thing['key']).docs[0])
                     update_author_w_works(solr, solr_doc)
+                    solr_docs += [solr_doc]
+                elif thing['key'].startswith('/works/'):
+                    solr_doc = dict(solr.select(query='key:%s' % thing['key']).docs[0])
+                    update_work_w_authors(solr, solr_doc)
+                    # update_work_w_editions(???)
                     solr_docs += [solr_doc]
                 else:
                     print("Unknown type: " + thing['key'])
