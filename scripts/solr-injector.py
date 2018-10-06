@@ -16,6 +16,8 @@ from openlibrary.utils import str_to_key, uniq
 from openlibrary.utils.isbn import opposite_isbn
 from openlibrary.utils.solr import Solr
 
+
+logging.basicConfig()
 logger = logging.getLogger("openlibrary.solr-injector")
 
 
@@ -259,18 +261,27 @@ def update_work_w_authors(solr, work_doc):
         fields=['name', 'alternative_name']
     )
 
-    work_doc['author_name'] = [a.name for a in resp.docs]
-    work_doc['author_alternative_name'] = [n for a in resp.docs for n in a.get('alternative_name', [])]
+    work_doc['author_name'] = [a.name for a in resp.docs if 'name' in a]
+    work_doc['author_alternative_name'] = [n for a in resp.docs if 'alternative_name' in a for n in a['alternative_name']]
     work_doc['author_facet'] = [' '.join(v) for v in zip(work_doc['author_key'], work_doc['author_name'])]
 
 
-def update_work_w_edition(solr_doc, edition):
-    shortkey = edition['key'].split("/")[2]
-
+def remove_computed_fields(solr_doc):
+    """
+    Removes computed fields (which shouldn't tried to be saved) from a
+    solr_doc
+    :param dict solr_doc:
+    :rtype: None
+    """
     if 'title_suggest' in solr_doc:
         del solr_doc['title_suggest']
     if 'text' in solr_doc:
         del solr_doc['text']
+
+def update_work_w_edition(solr_doc, edition):
+    shortkey = edition['key'].split("/")[2]
+
+    remove_computed_fields(solr_doc)
 
     title_field_map = {
         'title': 'alternative_title',
@@ -487,10 +498,12 @@ if __name__ == "__main__":
                 if thing['key'].startswith('/authors/'):
                     solr_doc = dict(solr.select(query='key:%s' % thing['key']).docs[0])
                     update_author_w_works(solr, solr_doc)
+                    remove_computed_fields(solr_doc)
                     solr_docs += [solr_doc]
                 elif thing['key'].startswith('/works/'):
                     solr_doc = dict(solr.select(query='key:%s' % thing['key']).docs[0])
                     update_work_w_authors(solr, solr_doc)
+                    remove_computed_fields(solr_doc)
                     # update_work_w_editions(???)
                     solr_docs += [solr_doc]
                 else:
