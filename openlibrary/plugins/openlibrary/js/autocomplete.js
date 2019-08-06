@@ -73,6 +73,16 @@ export class AutocompletingInputList {
         $(remove_el).closest('div.input').remove();
         this.update_visible();
     }
+
+    /**
+     * Extend jquery to include this class as a method
+     * @param {JQuery} $
+     */
+    static extend_jquery($) {
+        $.fn.setup_multi_input_autocomplete = function() {
+            return new AutocompletingInputList(this, ...arguments);
+        };
+    }
 }
 
 /**
@@ -142,11 +152,5 @@ export class SingleAutocompleteInput {
     /** Reset the accept/reject state of the input */
     resetAcceptReject() {
         $(this.input_el).removeClass('accept').removeClass('reject');
-    }
-}
-
-export default function($) {
-    $.fn.setup_multi_input_autocomplete = function() {
-        return new AutocompletingInputList(this, ...arguments);
     }
 }
