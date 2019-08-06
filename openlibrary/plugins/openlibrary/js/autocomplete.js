@@ -10,9 +10,75 @@
  */
 
 /**
+ * Class that manages events for a list of autocompleting inputs
+ */
+export class AutocompletingInputList {
+    /**
+     * @param {HTMLElement} container - the element that contains the different inputs.
+     * @param {string} autocomplete_selector - selector to find the input element use for autocomplete.
+     * @param {Function} input_renderer - ((index, item) -> html_string) render the ith div.input.
+     * @param {OpenLibraryAutocompleteOptions} ol_ac_opts
+     * @param {Object} ac_opts - options given to override defaults of $.autocomplete; see that.
+     */
+    constructor(container, autocomplete_selector, input_renderer, ol_ac_opts, ac_opts) {
+        this.container = $(container);
+        this.autocomplete_selector = autocomplete_selector;
+        this.input_renderer = input_renderer;
+        this.ol_ac_opts = ol_ac_opts;
+        this.ac_opts = ac_opts;
+
+        // first let's init any pre-existing inputs
+        this.container.find(this.autocomplete_selector).each((i, el) => {
+            new SingleAutocompleteInput(el, this.ol_ac_opts, this.ac_opts);
+        });
+
+        this.update_visible();
+
+        this.container.on('click', 'a.remove', event => this.remove_input(event.target));
+        this.container.on('click', 'a.add', event => {
+            event.preventDefault();
+            this.add_input();
+        });
+    }
+
+    /** Updates visibility of the remove/add buttons */
+    update_visible() {
+        if (this.container.find('div.input').length > 1) {
+            this.container.find('a.remove').show();
+        } else {
+            this.container.find('a.remove').hide();
+        }
+
+        this.container.find('a.add:not(:last)').hide();
+        this.container.find('a.add:last').show();
+    }
+
+    /** Create a new input and append at the end */
+    add_input() {
+        const next_index = this.container.find('div.input').length;
+        const new_input = $(this.input_renderer(next_index, {key:'', name: ''}));
+        this.container.append(new_input);
+        new SingleAutocompleteInput(
+            new_input.find(this.autocomplete_selector)[0],
+            this.ol_ac_opts,
+            this.ac_opts);
+        this.update_visible();
+    }
+
+    /**
+     * Remove the input item which contains this "remove" button
+     * @param {HTMLElement} remove_el
+     */
+    remove_input(remove_el) {
+        $(remove_el).closest('div.input').remove();
+        this.update_visible();
+    }
+}
+
+/**
  * @private
  */
-export class MultiAutocompleteInput {
+export class SingleAutocompleteInput {
     /**
      * @param{HTMLInputElement} input_el - input element that will become autocompleting.
      * @param{OpenLibraryAutocompleteOptions} ol_ac_opts
@@ -71,71 +137,8 @@ export class MultiAutocompleteInput {
     }
 }
 
-export class ListAutocompleteInput {
-    /**
-     * @param {HTMLElement} container - the element that contains the different inputs.
-     * @param {string} autocomplete_selector - selector to find the input element use for autocomplete.
-     * @param {Function} input_renderer - ((index, item) -> html_string) render the ith div.input.
-     * @param {OpenLibraryAutocompleteOptions} ol_ac_opts
-     * @param {Object} ac_opts - options given to override defaults of $.autocomplete; see that.
-     */
-    constructor(container, autocomplete_selector, input_renderer, ol_ac_opts, ac_opts) {
-        this.container = $(container);
-        this.autocomplete_selector = autocomplete_selector;
-        this.input_renderer = input_renderer;
-        this.ol_ac_opts = ol_ac_opts;
-        this.ac_opts = ac_opts;
-
-        // first let's init any pre-existing inputs
-        this.container.find(this.autocomplete_selector).each((i, el) => {
-            new MultiAutocompleteInput(el, this.ol_ac_opts, this.ac_opts);
-        });
-
-        this.update_visible();
-
-        this.container.on('click', 'a.remove', event => this.remove_input(event.target));
-        this.container.on('click', 'a.add', event => {
-            event.preventDefault();
-            this.add_input();
-        });
-    }
-
-    /** Updates visibility of the remove/add buttons */
-    update_visible() {
-        if (this.container.find('div.input').length > 1) {
-            this.container.find('a.remove').show();
-        } else {
-            this.container.find('a.remove').hide();
-        }
-
-        this.container.find('a.add:not(:last)').hide();
-        this.container.find('a.add:last').show();
-    }
-
-    /** Create a new input and append at the end */
-    add_input() {
-        const next_index = this.container.find('div.input').length;
-        const new_input = $(this.input_renderer(next_index, {key:'', name: ''}));
-        this.container.append(new_input);
-        new MultiAutocompleteInput(
-            new_input.find(this.autocomplete_selector)[0],
-            this.ol_ac_opts,
-            this.ac_opts);
-        this.update_visible();
-    }
-
-    /**
-     * Remove the input item which contains this "remove" button
-     * @param {HTMLElement} remove_el
-     */
-    remove_input(remove_el) {
-        $(remove_el).closest('div.input').remove();
-        this.update_visible();
-    }
-}
-
 export default function($) {
     $.fn.setup_multi_input_autocomplete = function() {
-        return new ListAutocompleteInput(this, ...arguments);
+        return new AutocompletingInputList(this, ...arguments);
     }
 }
