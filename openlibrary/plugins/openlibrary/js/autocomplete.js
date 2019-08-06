@@ -5,38 +5,31 @@ export default function($) {
      * Some extra options for when creating an autocomplete input field
      * @typedef {Object} OpenLibraryAutocompleteOptions
      * @property{string} endpoint - url to hit for autocomplete results
-     * @property{(boolean|Function)} [addnew] - when (or whether) to display a "Create new record"
-     *     element in the autocomplete list. The function takes the query and should return a boolean.
+     * @property{Function} [addnew] - when (or whether) to display a "Create new record"
+     *     element in the autocomplete list. If a function, the function should take the query and return
      *     a boolean.
      */
 
     /**
      * @private
-     * @param{HTMLInputElement} _this - input element that will become autocompleting.
+     * @param{HTMLInputElement} input_el - input element that will become autocompleting.
      * @param{OpenLibraryAutocompleteOptions} ol_ac_opts
      * @param{Object} ac_opts - options passed to $.autocomplete; see that.
      */
-    function setup_autocomplete(_this, ol_ac_opts, ac_opts) {
-        var default_ac_opts = {
+    function setup_autocomplete(input_el, ol_ac_opts, ac_opts) {
+        const default_ac_opts = {
             autoFill: true,
             mustMatch: true,
-            formatMatch: function(item) { return item.name; },
-            parse: function(text) {
-                // in v2, text IS the JSON
-                var rows = typeof text === 'string' ? JSON.parse(text) : text;
-                var parsed = [];
-                var i, row, query;
-                for (i=0; i < rows.length; i++) {
-                    row = rows[i];
-                    parsed.push({
-                        data: row,
-                        value: row.name,
-                        result: row.name
-                    });
-                }
+            formatMatch(item) { return item.name; },
+            parse(text) {
+                const query = $(input_el).val();
+                const rows = typeof text === 'string' ? JSON.parse(text) : text;
+                let parsed = rows.map(row => { return {
+                    data: row,
+                    value: row.name,
+                    result: row.name
+                }});
 
-                // XXX: this won't work when _this is multiple values (like $("input"))
-                query = $(_this).val();
                 if (ol_ac_opts.addnew && ol_ac_opts.addnew(query)) {
                     parsed = parsed.slice(0, ac_opts.max - 1);
                     parsed.push({
@@ -49,20 +42,14 @@ export default function($) {
             },
         };
 
-        $(_this)
+        $(input_el)
             .autocomplete(ol_ac_opts.endpoint, $.extend(default_ac_opts, ac_opts))
             .result(function(event, item) {
-                var $this;
-
                 $(`#${this.id}-key`).val(item.key);
-                $this = $(this);
-
                 //adding class directly is not working when tab is pressed. setTimeout seems to be working!
-                setTimeout(function() {
-                    $this.addClass('accept');
-                }, 0);
+                setTimeout(() => $(this).addClass('accept'), 0);
             })
-            .nomatch(function(){
+            .nomatch(function() {
                 $(`#${this.id}-key`).val('');
                 $(this).addClass('reject');
             })
@@ -79,7 +66,7 @@ export default function($) {
      * @param {Object} ac_opts - options given to override defaults of $.autocomplete; see that.
      */
     $.fn.setup_multi_input_autocomplete = function(autocomplete_selector, input_renderer, ol_ac_opts, ac_opts) {
-        var container = $(this);
+        const container = $(this);
 
         // first let's init any pre-existing inputs
         container.find(autocomplete_selector).each(function() {
@@ -89,8 +76,7 @@ export default function($) {
         function update_visible() {
             if (container.find('div.input').length > 1) {
                 container.find('a.remove').show();
-            }
-            else {
+            } else {
                 container.find('a.remove').hide();
             }
 
@@ -98,27 +84,28 @@ export default function($) {
             container.find('a.add:last').show();
         }
 
-        update_visible();
-
-        container.on('click', 'a.remove', function() {
-            if (container.find('div.input').length > 1) {
-                $(this).closest('div.input').remove();
-                update_visible();
-            }
-        });
-
-        container.on('click', 'a.add', function(event) {
-            var next_index, new_input;
-            event.preventDefault();
-
-            next_index = container.find('div.input').length;
-            new_input = $(input_renderer(next_index, {key:'', name: ''}));
+        function add_input() {
+            const next_index = container.find('div.input').length;
+            const new_input = $(input_renderer(next_index, {key:'', name: ''}));
             container.append(new_input);
             setup_autocomplete(
                 new_input.find(autocomplete_selector)[0],
                 ol_ac_opts,
                 ac_opts);
             update_visible();
+        }
+
+        function remove_input(remove_el) {
+            $(remove_el).closest('div.input').remove();
+            update_visible();
+        }
+
+        update_visible();
+
+        container.on('click', 'a.remove', event => remove_input(event.target));
+        container.on('click', 'a.add', event => {
+            event.preventDefault();
+            add_input();
         });
     };
 }
