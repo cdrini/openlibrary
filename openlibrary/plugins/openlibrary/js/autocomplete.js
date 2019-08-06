@@ -3,8 +3,8 @@
 /**
  * Some extra options for when creating an autocomplete input field
  * @typedef {Object} OpenLibraryAutocompleteOptions
- * @property{string} endpoint - url to hit for autocomplete results
- * @property{Function} [addnew] - (string -> boolean) when (or whether) to display
+ * @property {string} endpoint url to hit for autocomplete results
+ * @property {Function} [addnew] (string -> boolean) when (or whether) to display
  * a "Create new record" element in the autocomplete list. It should take the query
  * and return a boolean.
  */
@@ -14,11 +14,11 @@
  */
 export class AutocompletingInputList {
     /**
-     * @param {HTMLElement} container - the element that contains the different inputs.
-     * @param {string} autocomplete_selector - selector to find the input element use for autocomplete.
-     * @param {Function} input_renderer - ((index, item) -> html_string) render the ith div.input.
+     * @param {HTMLElement} container the element that contains the different inputs.
+     * @param {string} autocomplete_selector selector to find the input element use for autocomplete.
+     * @param {Function} input_renderer ((index, item) -> html_string) render the ith div.input.
      * @param {OpenLibraryAutocompleteOptions} ol_ac_opts
-     * @param {Object} ac_opts - options given to override defaults of $.autocomplete; see that.
+     * @param {Object} ac_opts options given to override defaults of $.autocomplete; see that.
      */
     constructor(container, autocomplete_selector, input_renderer, ol_ac_opts, ac_opts) {
         this.container = $(container);
@@ -77,12 +77,13 @@ export class AutocompletingInputList {
 
 /**
  * @private
+ * Creates a single autocomplete input to be used inside of {@link AutocompletingInputList}
  */
 export class SingleAutocompleteInput {
     /**
-     * @param{HTMLInputElement} input_el - input element that will become autocompleting.
-     * @param{OpenLibraryAutocompleteOptions} ol_ac_opts
-     * @param{Object} ac_opts - options passed to $.autocomplete; see that.
+     * @param {HTMLInputElement} input_el input element that will become autocompleting.
+     * @param {OpenLibraryAutocompleteOptions} ol_ac_opts
+     * @param {Object} ac_opts options passed to $.autocomplete; see that.
      */
     constructor(input_el, ol_ac_opts, ac_opts) {
         this.input_el = input_el;
@@ -119,6 +120,8 @@ export class SingleAutocompleteInput {
     }
 
     /**
+     * Place the visible input element in an "accepted" state, and update the
+     * 'true' (hidden) input element's value.
      * @param {Object} item
      */
     acceptValue(item) {
@@ -127,11 +130,16 @@ export class SingleAutocompleteInput {
         setTimeout(() => $(this.input_el).addClass('accept'), 0);
     }
 
+    /**
+     * Place the visible input element in a "rejected" state, and remove the
+     * 'true' (hidden) input element's value.
+     */
     rejectValue() {
         $(`#${this.input_el.id}-key`).val('');
         $(this.input_el).addClass('reject');
     }
 
+    /** Reset the accept/reject state of the input */
     resetAcceptReject() {
         $(this.input_el).removeClass('accept').removeClass('reject');
     }
