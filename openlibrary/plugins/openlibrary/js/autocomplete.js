@@ -1,22 +1,25 @@
 // jquery plugins to provide author and language autocompletes.
 
-export default function($) {
-    /**
-     * Some extra options for when creating an autocomplete input field
-     * @typedef {Object} OpenLibraryAutocompleteOptions
-     * @property{string} endpoint - url to hit for autocomplete results
-     * @property{Function} [addnew] - when (or whether) to display a "Create new record"
-     *     element in the autocomplete list. If a function, the function should take the query and return
-     *     a boolean.
-     */
+/**
+ * Some extra options for when creating an autocomplete input field
+ * @typedef {Object} OpenLibraryAutocompleteOptions
+ * @property{string} endpoint - url to hit for autocomplete results
+ * @property{Function} [addnew] - (string -> boolean) when (or whether) to display
+ * a "Create new record" element in the autocomplete list. It should take the query
+ * and return a boolean.
+ */
 
+/**
+ * @private
+ */
+export class MultiAutocompleteInput {
     /**
-     * @private
      * @param{HTMLInputElement} input_el - input element that will become autocompleting.
      * @param{OpenLibraryAutocompleteOptions} ol_ac_opts
      * @param{Object} ac_opts - options passed to $.autocomplete; see that.
      */
-    function setup_autocomplete(input_el, ol_ac_opts, ac_opts) {
+    constructor(input_el, ol_ac_opts, ac_opts) {
+        this.input_el = input_el;
         const default_ac_opts = {
             autoFill: true,
             mustMatch: true,
@@ -42,22 +45,33 @@ export default function($) {
             },
         };
 
-        $(input_el)
+        $(this.input_el)
             .autocomplete(ol_ac_opts.endpoint, $.extend(default_ac_opts, ac_opts))
-            .result(function(event, item) {
-                $(`#${this.id}-key`).val(item.key);
-                //adding class directly is not working when tab is pressed. setTimeout seems to be working!
-                setTimeout(() => $(this).addClass('accept'), 0);
-            })
-            .nomatch(function() {
-                $(`#${this.id}-key`).val('');
-                $(this).addClass('reject');
-            })
-            .keypress(function() {
-                $(this).removeClass('accept').removeClass('reject');
-            });
+            .result((_, item) => this.acceptValue(item))
+            .nomatch(this.rejectValue.bind(this))
+            .keypress(this.resetAcceptReject.bind(this));
     }
 
+    /**
+     * @param {Object} item
+     */
+    acceptValue(item) {
+        $(`#${this.input_el.id}-key`).val(item.key);
+        //adding class directly is not working when tab is pressed. setTimeout seems to be working!
+        setTimeout(() => $(this.input_el).addClass('accept'), 0);
+    }
+
+    rejectValue() {
+        $(`#${this.input_el.id}-key`).val('');
+        $(this.input_el).addClass('reject');
+    }
+
+    resetAcceptReject() {
+        $(this.input_el).removeClass('accept').removeClass('reject');
+    }
+}
+
+export default function($) {
     /**
      * @this HTMLElement - the element that contains the different inputs.
      * @param {string} autocomplete_selector - selector to find the input element use for autocomplete.
@@ -70,7 +84,7 @@ export default function($) {
 
         // first let's init any pre-existing inputs
         container.find(autocomplete_selector).each(function() {
-            setup_autocomplete(this, ol_ac_opts, ac_opts);
+            new MultiAutocompleteInput(this, ol_ac_opts, ac_opts);
         });
 
         function update_visible() {
@@ -88,7 +102,7 @@ export default function($) {
             const next_index = container.find('div.input').length;
             const new_input = $(input_renderer(next_index, {key:'', name: ''}));
             container.append(new_input);
-            setup_autocomplete(
+            new MultiAutocompleteInput(
                 new_input.find(autocomplete_selector)[0],
                 ol_ac_opts,
                 ac_opts);
