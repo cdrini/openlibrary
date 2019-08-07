@@ -1,4 +1,6 @@
-// jquery plugins to provide author and language autocompletes.
+/**
+ * Provides auto-completing inputs for OL things (works, languages, etc).
+ */
 
 /**
  * Some extra options for when creating an autocomplete input field

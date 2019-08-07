@@ -1,6 +1,6 @@
 import jquery from 'jquery';
 import sinon from 'sinon';
-import { ThingInputList, ThingInput } from '../../../openlibrary/plugins/openlibrary/js/autocomplete';
+import { ThingInputList, ThingInput } from '../../../openlibrary/plugins/openlibrary/js/ThingInputs';
 
 let sandbox;
 

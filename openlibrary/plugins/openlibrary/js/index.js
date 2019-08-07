@@ -1,5 +1,5 @@
 import { validateEmail, validatePassword } from './account.js';
-import { ThingInputList } from './autocomplete';
+import { ThingInputList } from './ThingInputs';
 import addNewFieldInit from './add_new_field';
 import automaticInit from './automatic';
 import { getAvailabilityV2,
