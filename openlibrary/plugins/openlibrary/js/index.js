@@ -1,5 +1,5 @@
 import { validateEmail, validatePassword } from './account.js';
-import { AutocompletingInputList } from './autocomplete';
+import { ThingInputList } from './autocomplete';
 import addNewFieldInit from './add_new_field';
 import automaticInit from './automatic';
 import { getAvailabilityV2,
@@ -81,7 +81,7 @@ jQuery.fn.fadeToggle = fadeToggle;
 // Initialise some things
 $(function () {
     initValidate($);
-    AutocompletingInputList.extend_jquery($);
+    ThingInputList.extend_jquery($);
     addNewFieldInit($);
     automaticInit($);
     bookReaderInit($);

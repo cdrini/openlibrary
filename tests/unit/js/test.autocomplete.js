@@ -1,6 +1,6 @@
 import jquery from 'jquery';
 import sinon from 'sinon';
-import { AutocompletingInputList, SingleAutocompleteInput } from '../../../openlibrary/plugins/openlibrary/js/autocomplete';
+import { ThingInputList, ThingInput } from '../../../openlibrary/plugins/openlibrary/js/autocomplete';
 
 let sandbox;
 
@@ -9,24 +9,24 @@ beforeEach(() => {
     global.$ = jquery;
     sandbox.stub(global, '$').callsFake(jquery);
     // FIXME make this importable
-    const autocompleteMock = {};
-    autocompleteMock.result = sinon.stub().returns(autocompleteMock);
-    autocompleteMock.nomatch = sinon.stub().returns(autocompleteMock);
-    autocompleteMock.keypress = sinon.stub().returns(autocompleteMock);
-    global.$.fn.autocomplete = sinon.stub().returns(autocompleteMock);
+    const autocompleteStub = {};
+    autocompleteStub.result = sinon.stub().returns(autocompleteStub);
+    autocompleteStub.nomatch = sinon.stub().returns(autocompleteStub);
+    autocompleteStub.keypress = sinon.stub().returns(autocompleteStub);
+    global.$.fn.autocomplete = sinon.stub().returns(autocompleteStub);
 });
 
-describe('AutocompletingInputList', () => {
+describe('ThingInputList', () => {
     test('Can extend the jquery object', () => {
         expect('setup_multi_input_autocomplete' in $.fn).toBe(false);
-        AutocompletingInputList.extend_jquery($);
+        ThingInputList.extend_jquery($);
         expect('setup_multi_input_autocomplete' in $.fn).toBe(true);
     });
 
     test('Does not error when initialized with no elements', () => {
-        new AutocompletingInputList(
+        new ThingInputList(
             $('<div/>')[0],
-            '.foo-bar',
+            '.foo',
             () => '<div class="input" />',
             {},
             {}
@@ -35,10 +35,10 @@ describe('AutocompletingInputList', () => {
 
     test('add_input creates children', () => {
         const $container = $('<div/>');
-        const list = new AutocompletingInputList(
+        const list = new ThingInputList(
             $container[0],
-            '.foo-bar',
-            () => '<div class="input" />',
+            '.foo',
+            i => `<div class="input"><input class="foo" id="foo--${i}"></div>`,
             {},
             {}
         );
@@ -50,10 +50,10 @@ describe('AutocompletingInputList', () => {
 
     test('add_input calls renderer with correct index', () => {
         const $container = $('<div/>');
-        const rendererSpy = sinon.spy(() => '<div class="input" />');
-        const list = new AutocompletingInputList(
+        const rendererSpy = sinon.spy(i => `<div class="input"><input class="foo" id="foo--${i}"></div>`);
+        const list = new ThingInputList(
             $container[0],
-            '.foo-bar',
+            '.foo',
             rendererSpy,
             {},
             {}
@@ -67,10 +67,10 @@ describe('AutocompletingInputList', () => {
 
     test('remove_input removes children', () => {
         const $container = $('<div/>');
-        const list = new AutocompletingInputList(
+        const list = new ThingInputList(
             $container[0],
-            '.foo-bar',
-            () => '<div class="input" />',
+            '.foo',
+            i => `<div class="input"><input class="foo" id="foo--${i}"></div>`,
             {},
             {}
         );
@@ -85,10 +85,10 @@ describe('AutocompletingInputList', () => {
 
     test('update_visible hides remove link when only 1 element', () => {
         const $container = $('<div/>');
-        const list = new AutocompletingInputList(
+        const list = new ThingInputList(
             $container[0],
-            '.foo-bar',
-            () => '<div class="input"><a class="remove" /></div>',
+            '.foo',
+            i => `<div class="input"><input class="foo" id="foo--${i}"><a class="remove"/></div>`,
             {},
             {}
         );
@@ -100,10 +100,10 @@ describe('AutocompletingInputList', () => {
     test('update_visible shows remove link when more than 1 element', () => {
         const $container = $('<div/>');
         const children = 5;
-        const list = new AutocompletingInputList(
+        const list = new ThingInputList(
             $container[0],
-            '.foo-bar',
-            () => '<div class="input"><a class="remove" /></div>',
+            '.foo',
+            i => `<div class="input"><input class="foo" id="foo--${i}"><a class="remove"/></div>`,
             {},
             {}
         );
@@ -119,10 +119,10 @@ describe('AutocompletingInputList', () => {
     test('update_visible hides last a.add', () => {
         const $container = $('<div/>');
         const children = 5;
-        const list = new AutocompletingInputList(
+        const list = new ThingInputList(
             $container[0],
-            '.foo-bar',
-            () => '<div class="input"><a class="add" /></div>',
+            '.foo',
+            i => `<div class="input"><input class="foo" id="foo--${i}"><a class="add"/></div>`,
             {},
             {}
         );
@@ -138,17 +138,17 @@ describe('AutocompletingInputList', () => {
 });
 
 
-describe('SingleAutocompleteInput', () => {
+describe('ThingInput', () => {
     test('acceptValue updates -key element value', () => {
-        $(document.body).html('<input id="author" ><input id="author-key" value="old">');
-        const sai = new SingleAutocompleteInput($('#author')[0], {}, {});
+        $(document.body).html('<input id="author"><input id="author-key" value="old">');
+        const sai = new ThingInput($('#author')[0], {}, {});
         sai.acceptValue({key: 'foo'});
         expect($('#author-key').val()).toBe('foo');
     });
 
     test('rejectValue empties -key element value', () => {
-        $(document.body).html('<input id="author" ><input id="author-key" value="old">');
-        const sai = new SingleAutocompleteInput($('#author')[0], {}, {});
+        $(document.body).html('<input id="author"><input id="author-key" value="old">');
+        const sai = new ThingInput($('#author')[0], {}, {});
         sai.rejectValue();
         expect($('#author-key').val()).toBe('');
     });
