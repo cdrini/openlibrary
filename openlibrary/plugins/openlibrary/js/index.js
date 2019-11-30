@@ -105,8 +105,8 @@ jQuery(function () {
             .then((module) => module.init());
     }
 
-    const pageScanEl = $('#page-scan');
-    if (pageScanEl) {
+    const $pageScanEl = $('#page-scan');
+    if ($pageScanEl.length) {
         import(/* webpackChunkName: "page_scan" */ './page_scan')
             .then((module) => module.init());
     }
