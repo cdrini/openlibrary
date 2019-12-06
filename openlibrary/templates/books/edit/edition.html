@@ -292,8 +292,9 @@ window.q.push(function() {
                                     $for role in edition_config.roles:
                                         <option>$role</option>
 
-                                    <!-- <option>---</option> -->
-                                    <!-- <option value="__add__">$_("Add a new role")</option> -->
+                                    $if ctx.user and (ctx.user.is_admin() or ctx.user.is_librarian()):
+                                        <option>---</option>
+                                        <option value="__add__">$_("Add a new role")</option>
                                 </select>
                             </td>
                             <td>
@@ -456,8 +457,9 @@ window.q.push(function() {
                                 $for id in set2:
                                     <option value="$id.name">$id.label</option>
 
-                                <!-- <option>---</option> -->
-                                <!-- <option value="__add__">Add a new ID type</option> -->
+                                $if ctx.user and (ctx.user.is_admin() or ctx.user.is_librarian()):
+                                    <option>---</option>
+                                    <option value="__add__">Add a new ID type</option>
                             </select>
                         </td>
                         <td>
@@ -522,8 +524,9 @@ window.q.push(function() {
                                 $for d in edition_config.classifications:
                                     <option value="$d.name">$d.label</option>
 
-                                <!-- <option>---</option> -->
-                                <!-- <option value="__add__">$_("Add a new classification type")</option> -->
+                                $if ctx.user and (ctx.user.is_admin() or ctx.user.is_librarian()):
+                                    <option>---</option>
+                                    <option value="__add__">$_("Add a new classification type")</option>
                             </select>
                         </td>
                         <td>
