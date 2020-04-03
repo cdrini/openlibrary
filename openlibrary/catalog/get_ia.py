@@ -18,7 +18,7 @@ from openlibrary.catalog.marc.fast_parse import read_file as fast_read_file  # D
 from openlibrary.core import ia
 
 
-IA_BASE_URL = config.get('ia_base_url')
+IA_BASE_URL = config.get('ia_base_url', 'https://archive.org')
 IA_DOWNLOAD_URL = '%s/download/' % IA_BASE_URL
 MAX_MARC_LENGTH = 100000
 

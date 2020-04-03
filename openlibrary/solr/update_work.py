@@ -21,7 +21,9 @@ from openlibrary.catalog.utils.query import set_query_host, base_url as get_ol_b
 from openlibrary.core import helpers as h
 from openlibrary.core import ia
 from openlibrary.solr.data_provider import get_data_provider, DataProvider
+from openlibrary.utils.ddc import normalize_ddc
 from openlibrary.utils.isbn import opposite_isbn
+from openlibrary.utils.lcc import short_lcc_to_sortable_lcc
 
 logger = logging.getLogger("openlibrary.solr")
 
@@ -509,6 +511,31 @@ class SolrProcessor:
                            if db_key in e
                            for v in e[db_key])
             add_list(solr_key, values)
+
+        try:
+            raw_lccs = set(lcc
+                           for ed in editions
+                           for lcc in ed.get('lc_classifications', []))
+            lccs = set(lcc for lcc in map(short_lcc_to_sortable_lcc, raw_lccs) if lcc)
+            if lccs:
+                add_list("lcc", lccs)
+                # Choose the... idk, longest as best?
+                add("lcc_sort", sorted(lccs, key=len, reverse=True)[0])
+            web.debug('DR2 ' + ', '.join(raw_lccs) + ' -> ' + ', '.join(lccs))
+
+            raw_ddcs = set(ddc
+                           for ed in editions
+                           for ddc in ed.get('dewey_decimal_class', []))
+            ddcs = set(ddc
+                       for raw_ddc in raw_ddcs
+                       for ddc in normalize_ddc(raw_ddc))
+            if ddcs:
+                add_list("ddc", ddcs)
+                add("ddc_sort", sorted(ddcs, key=len, reverse=True)[0])
+            web.debug('DR2 ' + ', '.join(raw_ddcs) + ' -> ' + ', '.join(ddcs))
+        except Exception as e:
+            web.debug('DR2 ERRORED! ' + e.message)
+            raise
 
         add_list("isbn", self.get_isbns(editions))
         add("last_modified_i", self.get_last_modified(w, editions))

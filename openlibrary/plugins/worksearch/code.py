@@ -37,7 +37,12 @@ def read_author_facet(af):
     # example input: "OL26783A Leo Tolstoy"
     return re_author_facet.match(af).groups()
 
-search_fields = ["key", "redirects", "title", "subtitle", "alternative_title", "alternative_subtitle", "edition_key", "by_statement", "publish_date", "lccn", "ia", "oclc", "isbn", "contributor", "publish_place", "publisher", "first_sentence", "author_key", "author_name", "author_alternative_name", "subject", "person", "place", "time"]
+search_fields = [
+    "key", "redirects", "title", "subtitle", "alternative_title",
+    "alternative_subtitle", "edition_key", "by_statement", "publish_date", "lccn", "ia",
+    "oclc", "isbn", "contributor", "publish_place", "publisher", "first_sentence",
+    "author_key", "author_name", "author_alternative_name", "subject", "person",
+    "place", "time", "lcc", "ddc"]
 
 all_fields = search_fields + ["has_fulltext", "title_suggest", "edition_count", "publish_year", "language", "number_of_pages", "ia_count", "publisher_facet", "author_facet", "first_publish_year"] + ['%s_key' % f for f in ('subject', 'person', 'place', 'time')]
 
@@ -163,7 +168,8 @@ def build_q_list(param):
                 if v:
                     q_list.append("(author_name:(%(name)s) OR author_alternative_name:(%(name)s))" % {'name': v})
 
-        check_params = ['title', 'publisher', 'oclc', 'lccn', 'contribtor', 'subject', 'place', 'person', 'time']
+        check_params = ['title', 'publisher', 'oclc', 'lccn', 'contribtor', 'subject',
+                        'place', 'person', 'time', 'lcc', 'ddc']
         q_list += ['%s:(%s)' % (k, param[k]) for k in check_params if k in param]
         if param.get('isbn'):
             q_list.append('isbn:(%s)' % (normalize_isbn(param['isbn']) or param['isbn']))
@@ -209,7 +215,7 @@ def run_solr_query(param = {}, rows=100, page=1, sort=None, spellcheck_count=Non
         ('fl', ','.join(fields or [
             'key', 'author_name', 'author_key', 'title', 'subtitle', 'edition_count',
             'ia', 'has_fulltext', 'first_publish_year', 'cover_i', 'cover_edition_key',
-            'public_scan_b', 'lending_edition_s', 'lending_identifier_s',
+            'public_scan_b', 'lending_edition_s', 'lending_identifier_s', 'ddc', 'lcc',
             'ia_collection_s'])),
         ('fq', 'type:work'),
         ('q.op', 'AND'),
@@ -503,7 +509,8 @@ class search(delegate.page):
             if m:
                 self.isbn_redirect(m.group(1))
             q_list.append(q)
-        for k in ('title', 'author', 'isbn', 'subject', 'place', 'person', 'publisher'):
+        for k in ['title', 'author', 'isbn', 'subject', 'place', 'person', 'publisher',
+                   'lcc', 'ddc']:
             if k in i:
                 v = re_to_esc.sub(lambda m:'\\' + m.group(), i[k].strip())
                 q_list.append(k + ':' + v)
