@@ -10,7 +10,7 @@ import simplejson
 from six.moves import urllib
 
 
-IA_BASE_URL = config.get('ia_base_url')
+IA_BASE_URL = config.get('ia_base_url', 'https://archive.org')
 
 
 def wget(url):
