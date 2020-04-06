@@ -1,14 +1,20 @@
 """Python library for accessing Solr.
 """
+import json
 import re
+
 import web
 import simplejson
 import logging
 
 from six.moves import urllib
 
-
 logger = logging.getLogger("openlibrary.logger")
+REQUEST_TIMEOUT = 3
+CONTENT_TYPES = {
+    'form': 'application/x-www-form-urlencoded',
+    'json': 'application/json',
+}
 
 def urlencode(d, doseq=False):
     """There is a bug in urllib when used with unicode data.
@@ -84,22 +90,63 @@ class Solr:
                     name = f
                 params['facet.field'].append(name)
 
+        payload = urlencode(params, doseq=True)
+        url = "/select"
         # switch to POST request when the payload is too big.
         # XXX: would it be a good idea to switch to POST always?
-        payload = urlencode(params, doseq=True)
-        url = self.base_url + "/select"
         if len(payload) < 500:
             url = url + "?" + payload
-            logger.info("solr request: %s", url)
-            data = urllib.request.urlopen(url, timeout=3).read()
+            resp = self._get(url)
         else:
-            logger.info("solr request: %s ...", url)
-            request = urllib.request.Request(url, payload, {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"})
-            data = urllib.request.urlopen(request, timeout=3).read()
+            resp = self._post(url, payload)
         return self._parse_solr_result(
-            simplejson.loads(data),
+            simplejson.loads(resp),
             doc_wrapper=doc_wrapper,
             facet_wrapper=facet_wrapper)
+
+    def _get(self, url, params=None):
+        url = self.base_url + url
+        if params:
+            url += '?' + urlencode(params, doseq=True)
+        logger.info("solr request: %s", url)
+        return urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT).read()
+
+    def _post(self, endpoint, payload, encoding='form'):
+        """
+        :param str endpoint:
+        :param dict payload:
+        :param 'form' | 'json' encoding:
+        """
+        if encoding == 'json':
+            encoded_payload = simplejson.dumps(payload)
+        elif encoding == 'form':
+            encoded_payload = urlencode(payload, doseq=True)
+        else:
+            raise ValueError()
+
+        url = self.base_url + endpoint
+        logger.info("solr request: %s ...", url)
+        request = urllib.request.Request(url, encoded_payload, {
+            "Content-Type": "%s; charset=UTF-8" % CONTENT_TYPES[encoding]
+        })
+        return urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT).read()
+
+    def get_doc(self, key):
+        """
+        Fetch a solr document directly. Usually do this if you want to update the doc
+        :param str key: e.g. /works/OL1W
+        :rtype: dict|None
+        """
+        result = self._get('/select', {'q': 'key:%s' % key, 'wt': 'json'})
+        result = json.loads(result)
+        docs = result['response'].get('docs', None)
+        return docs and docs[0]
+
+    def update_doc(self, doc):
+        self._post('/update/json', {'add': {'doc': doc}}, encoding='json')
+
+    def commit(self):
+        self._get('/update', {'commit': 'true', 'wt': 'json'})
 
     def _parse_solr_result(self, result, doc_wrapper, facet_wrapper):
         response = result['response']
@@ -148,6 +195,6 @@ class Solr:
             q = query
         return q
 
-if __name__ == '__main__':
-    import doctest
-    doctest.testmod()
+solr = Solr('http://192.168.99.100:8983/solr')
+doc = solr.get_doc('/works/OL3641574W')
+solr.update_doc(doc)

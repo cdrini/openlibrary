@@ -3,7 +3,7 @@
 
 import datetime
 import calendar
-
+import time
 
 MINUTE_SECS = 60
 HALF_HOUR_SECS = MINUTE_SECS * 30
@@ -89,3 +89,10 @@ def _resize_list(x, size):
     if len(x) < size:
         x += [None] * (size - len(x))
 
+
+def get_epoch_timestamp_ms():
+    return time.time() * 1000
+
+
+def parse_epoch_timestamp_ms(ms):
+    return datetime.datetime(ms / 1000)

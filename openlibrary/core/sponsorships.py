@@ -1,3 +1,7 @@
+from datetime import datetime, timedelta
+import json
+import time
+
 import requests
 import logging
 import web
@@ -14,6 +18,8 @@ from openlibrary.accounts.model import get_internet_archive_id
 from openlibrary.core.civicrm import (
     get_contact_id_by_username,
     get_sponsorships_by_contact_id)
+from openlibrary.plugins.worksearch.search import get_solr
+from openlibrary.utils.dateutil import parse_epoch_timestamp_ms, get_epoch_timestamp_ms
 
 try:
     from booklending_utils.sponsorship import eligibility_check
@@ -25,6 +31,9 @@ except ImportError:
 logger = logging.getLogger("openlibrary.sponsorship")
 SETUP_COST_CENTS = 300
 PAGE_COST_CENTS = 12
+SOLR_EXPIRATION = timedelta(days=1)
+solr = get_solr()
+
 
 def get_sponsored_editions(user):
     """
@@ -93,7 +102,7 @@ def do_we_want_it(isbn, work_id):
 @public
 def qualifies_for_sponsorship(edition):
     """
-    :param edition edition: An infogami book edition
+    :param openlibrary.plugins.upstream.models.Edition edition:
     :rtype: dict
     :return: A dict with book eligibility:
     {
@@ -122,6 +131,7 @@ def qualifies_for_sponsorship(edition):
         'price': None
     }
 
+    # TODO: Add these as @property to Edition class; don't modify the type here
     edition.isbn = edition.get_isbn13()
     edition.cover = edition.get('covers') and (
         'https://covers.openlibrary.org/b/id/%s-L.jpg' % edition.covers[0])
@@ -130,7 +140,7 @@ def qualifies_for_sponsorship(edition):
     edition_data = dict((field, (amz_metadata.get(field) or edition.get(field))) for field in req_fields)
     work = edition.works and edition.works[0]
 
-    if not (work and all(edition_data.values())):
+    if not work or not all(edition_data.values()):
         resp['error'] = {
             'reason': 'Open Library is missing book metadata necessary for sponsorship',
             'values': edition_data
@@ -174,7 +184,54 @@ def qualifies_for_sponsorship(edition):
             'isbn': edition.isbn
         })
     })
+    price = resp.get('price', {}).get('total_price_cents')
+    # TODO: Do this non-blocking. Don't need response.
+    index_sponsorship_status(work.key, edition.key, price)
     return resp
+
+
+def index_sponsorship_status(work_key, edition_key, price):
+    """
+    :param str work_key: e.g. /works/OL1W
+    :param str edition_key: e.g. /books/OL1M
+    :param int|None price: price in cents; None if not sponsorable
+    """
+    solr_doc = solr.get_doc(work_key)
+    if not solr_doc:
+        return
+    sponsorship_data = json.loads(solr_doc.get('sponsorship_data_s', '{}'))
+    changed = False
+
+    if price is None and edition_key in sponsorship_data:
+        del sponsorship_data[edition_key]
+        changed = True
+    else:
+        prev_data = sponsorship_data.get(edition_key, {})
+
+        def expired():
+            prev = parse_epoch_timestamp_ms(sponsorship_data[edition_key]['timestamp'])
+            return (datetime.now() - prev) > SOLR_EXPIRATION
+
+        # Only perform the update if price doesn't match
+        if price != prev_data.get('price') or expired():
+            sponsorship_data[edition_key] = {
+                'price': price,
+                'timestamp': get_epoch_timestamp_ms(),
+            }
+
+            changed = True
+
+    if changed:
+        if sponsorship_data:
+            solr_doc.update({
+                'sponsorship_data_s': json.dumps(sponsorship_data),
+                'min_sponsorship_price_i': min(*[d['price'] for d in sponsorship_data]),
+            })
+        else:
+            del solr_doc['sponsorship_data_s']
+            del solr_doc['min_sponsorship_price_i']
+
+        solr.update_doc(solr_doc)
 
 
 def get_sponsored_books():
