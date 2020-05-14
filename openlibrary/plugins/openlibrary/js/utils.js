@@ -26,11 +26,6 @@ export function truncate(text, limit) {
 }
 
 // used in templates/admin/ip/view.html
-export function cond(predicate, true_value, false_value) {
-    if (predicate) {
-        return true_value;
-    }
-    else {
-        return false_value;
-    }
+export function cond(predicate, true_value, false_value='') {
+    return predicate ? true_value : false_value;
 }
