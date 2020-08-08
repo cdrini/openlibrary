@@ -419,7 +419,7 @@ class account_validation(delegate.page):
     def validate_username(username):
         for validator in username_validators:
             if not validator.valid(username):
-                return validator.msg
+                return unicode(validator.msg)
 
     @staticmethod
     def validate_email(email):
