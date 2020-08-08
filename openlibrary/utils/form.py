@@ -190,6 +190,12 @@ class RegexpValidator(Validator):
     def valid(self, value):
         return bool(self.rexp.match(value))
 
+
+class ExcludingRegexpValidator(RegexpValidator):
+    def valid(self, value):
+        return not bool(self.rexp.match(value))
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
