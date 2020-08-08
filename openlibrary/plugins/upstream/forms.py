@@ -32,6 +32,18 @@ vlogin = RegexpValidator(r"^[A-Za-z0-9-_]{3,20}$", _('Must be between 3 and 20 l
 vpass = RegexpValidator(r".{3,20}", _('Must be between 3 and 20 characters'))
 vemail = RegexpValidator(r".*@.*", _("Must be a valid email address"))
 
+username_validators = [
+    vlogin,
+
+    # A lot of spam has been of this shape:
+    # - /people/the_rental2020
+    # - /people/123movies_watch_the_hunger_games_2013_hd_full_movie_online_free
+    RegexpValidator(r"(\b|[-_])(123movies|watch|hd|episodes?|free)(\b|[-_])",
+                    _('Username already used')),
+
+    username_validator,
+]
+
 class EqualToValidator(Validator):
     def __init__(self, fieldname, message):
         Validator.__init__(self, message, None)
@@ -52,7 +64,7 @@ class RegisterForm(Form):
             klass='required',
             help=_("Letters and numbers only please, and at least 3 characters."),
             autocapitalize="off",
-            validators=[vlogin, username_validator]),
+            validators=username_validators),
         Password('password', description=_('Choose a password'),
             klass='required',
             validators=[vpass]),

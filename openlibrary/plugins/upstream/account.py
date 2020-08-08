@@ -34,6 +34,7 @@ from openlibrary.plugins.upstream import borrow, forms, utils
 from six.moves import range
 from six.moves import urllib
 
+from openlibrary.plugins.upstream.forms import username_validators
 
 logger = logging.getLogger("openlibrary.account")
 
@@ -416,13 +417,9 @@ class account_validation(delegate.page):
 
     @staticmethod
     def validate_username(username):
-        if not 3 <= len(username) <= 20:
-            return _('Username must be between 3-20 characters')
-        if not re.match('^[A-Za-z0-9-_]{3,20}$', username):
-            return _('Username may only contain numbers and letters')
-        ol_account = OpenLibraryAccount.get(username=username)
-        if ol_account:
-            return _("Username unavailable")
+        for validator in username_validators:
+            if not validator.valid(username):
+                return validator.msg
 
     @staticmethod
     def validate_email(email):
