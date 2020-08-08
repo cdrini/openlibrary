@@ -40,7 +40,7 @@ username_validators = [
     # - /people/123movies_watch_the_hunger_games_2013_hd_full_movie_online_free
     RegexpValidator(r"(\b|[-_])(123movies|watch|hd|episodes?|free)(\b|[-_])",
                     _('Username already used')),
-
+    RegexpValidator(r"2\d{3}$", _('Username already used')),
     username_validator,
 ]
 
