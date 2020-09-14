@@ -1,4 +1,7 @@
 from __future__ import print_function
+
+import json
+
 import web
 import os
 
@@ -9,6 +12,8 @@ from babel.messages import Catalog
 from babel.messages.pofile import read_po, write_po
 from babel.messages.mofile import write_mo
 from babel.messages.extract import extract_from_file, extract_from_dir, extract_python
+
+from six.moves import urllib
 
 root = os.path.dirname(__file__)
 
@@ -112,15 +117,35 @@ def load_locale(lang):
 class GetText:
     def __call__(self, string, *args, **kwargs):
         """Translate a given string to the language of the current locale."""
-        translations = load_translations(web.ctx.get('lang', 'en'))
-        value = (translations and translations.ugettext(string)) or string
+        lang = web.ctx.get('lang', 'en')
+        show_i18n_markers = False
+
+        # If the lang is set to e.g. i18n-fr, then we load fr and display special noise
+        # on the screen to help translators.
+        if lang.startswith('i18n-'):
+            show_i18n_markers = True
+            lang = lang.split('-')[1]
+
+        translations = load_translations(lang)
+        # FIXME: This is always True for langs with a .po file :/
+        has_translation = translations and translations.ugettext(string)
+        value = has_translation or string
 
         if args:
             value = value % args
         elif kwargs:
             value = value % kwargs
 
-        return value
+        if show_i18n_markers:
+            d = {
+                # TODO: We need to know whether the resulting text should be escaped!
+                'key': string,
+                'translated_text': value,
+                'status': 'done' if has_translation else 'todo',
+            }
+            return '__I18N__{%s}' % urllib.parse.quote(json.dumps(d))
+        else:
+            return value
 
     def __getattr__(self, key):
         from infogami.utils.i18n import strings

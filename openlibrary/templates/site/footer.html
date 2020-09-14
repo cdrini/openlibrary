@@ -41,4 +41,114 @@ $if bodyid == 'user' or 'admin':
       archive_analytics.set_up_event_tracking();
     }
     </script>
+
+$ locale = (i18n.get_locale() or 'en').replace('i18n-', '')
+$# TODO: Include this only if in inline i18n mode
+$# TODO: Move into separate files
+<style>
+[data-i18n-status="todo"] {
+    background: yellow !important;
+    color: black !important;
+    cursor: text;
+}
+
+[data-i18n-status="done"] {
+    background: #0F0 !important;
+    color: black !important;
+    cursor: text;
+}
+</style>
+<script>
+var CTX_LOCALE =  '$locale';
+function click(ev) { ev.preventDefault(); console.log(ev); }
+document.documentElement.addEventListener('click', click, { capture: true} );
+
+
+function findAll(startNode, regex) {
+  const results = [];
+  function emit(matchingNode) {
+    results.push(matchingNode);
+  }
+
+  function walk(node) {
+    if (node instanceof Text) {
+      const matches = node.textContent.match(regex);
+      if (matches) {
+        emit(node);
+      }
+    } else if (node instanceof Attr) {
+      const matches = node.value.match(regex);
+      if (matches) {
+        emit(node);
+      }
+    } else {
+      if (node.attributes) {
+        for (const attr of node.attributes) {
+          walk(attr);
+        }
+      }
+      for (const child of node.childNodes) {
+        walk(child);
+      }
+    }
+  }
+
+  walk(startNode);
+  return results;
+}
+
+function splitAndKeep(str, regex) {
+  const result = [];
+  let lastEnd = 0;
+  for (let m = regex.exec(str); m; m = regex.exec(str)) {
+    if (m.index != lastEnd) result.push(str.slice(lastEnd, m.index));
+    result.push(m[0]);
+    lastEnd = m.index + m[0].length;
+    }
+  if (lastEnd != str.length) result.push(str.slice(lastEnd));
+  return result;
+}
+
+function parseI18nData(str) {
+  return JSON.parse(decodeURIComponent(str.slice('__I18N__{'.length, -1)));
+}
+
+function expandI18N(node) {
+  if (node instanceof Text) {
+    // We need to replace this node with a span node
+    const parts = splitAndKeep(node.textContent, /__I18N__\{[^\}]+\}/g);
+    const replacementNodes = parts.map(p => {
+      if (p.startsWith('__I18N__')) {
+        const data = parseI18nData(p);
+        const span = document.createElement('span');
+        span.setAttribute('lang', CTX_LOCALE);
+        span.setAttribute('data-i18n-key', data.key);
+        span.setAttribute('data-i18n-status', data.status);
+        span.setAttribute('contenteditable', 'true');
+        span.onclick = 'return false';
+        // TODO: We need to know if these should be escaped!
+        span.innerHTML = data.translated_text;
+        return span;
+      } else {
+        return document.createTextNode(p);
+      }
+    });
+    node.replaceWith(...replacementNodes);
+    } else if (node instanceof Attr) {
+    const parts = splitAndKeep(node.value, /__I18N__\{[^\}]+\}/g);
+    let lastEnd = 0;
+    const result = parts.map(p => {
+      if (p.startsWith('__I18N__')) {
+        const data = parseI18nData(p);
+        node.ownerElement.setAttribute('data-i18n-status', data.status);
+        return data.translated_text;
+      } else return p;
+    }).join('');
+    node.value = result;
+  }
+}
+
+var i18nNodes = findAll(document.documentElement, /__I18N__/)
+.forEach(expandI18N);
+</script>
 </html>
