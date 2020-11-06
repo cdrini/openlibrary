@@ -7,7 +7,7 @@ pipeline {
       args '-v /var/run/docker.sock:/var/run/docker.sock'
       args '-v /var/lib/docker/volumes/jenkins-data:/var/lib/docker/volumes/jenkins-data'
       // Where to store dumps
-      args '-v /storage:/storage'
+      args '-v solrbuilder_storage:/storage'
     }
   }
   parameters {
