@@ -16,7 +16,8 @@ pipeline {
                 '''
 
                 // Also: Don't need node_modules from scratch; use the one in the docker image
-                sh "ln -s /openlibrary/node_modules ${env.WORKSPACE}/node_modules"
+                // sh "ln -s /openlibrary/node_modules ${env.WORKSPACE}/node_modules"
+                // ^ This somehow made it significantly slower?
             }
         }
         stage('Install') {
