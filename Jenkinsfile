@@ -9,11 +9,7 @@ pipeline {
                 // Remove the symlink in this directory; that's what makes it available
                 sh 'rm infogami'
                 // Make a master version
-                sh '''
-                    cp -r vendor/infogami vendor/infogami-master
-                    cd vendor/infogami-master
-                    git pull origin master
-                '''
+                sh 'git clone https://github.com/internetarchive/infogami.git vendor/infogami-master'
 
                 // Also: Don't need node_modules from scratch; use the one in the docker image
                 // sh "ln -s /openlibrary/node_modules ${env.WORKSPACE}/node_modules"
@@ -68,10 +64,7 @@ pipeline {
                         PYENV_VERSION = '3.8.6'
                         PYTHONPATH = "${env.WORKSPACE}/vendor/infogami-master"
                     }
-                    steps {
-                        dir('vendor/infogami') { sh 'git pull origin master' }
-                        sh 'make test-py'
-                    }
+                    steps { sh 'make test-py' }
                 }
                 stage('JS') { steps { sh 'npm run test:js' } }
             }
