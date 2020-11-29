@@ -2,7 +2,7 @@ pipeline {
     agent { docker { image 'openlibrary/olbase:latest' } }
 
     stages {
-        state('Prep') {
+        stage('Prep') {
             // Need infogami to be master sometimes; let's do it using env
             // variables
             steps {
