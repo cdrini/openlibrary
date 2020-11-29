@@ -7,7 +7,8 @@ pipeline {
             parallel {
                 stage('Lint') { steps { sh 'npm run lint:js' } }
                 stage('Unit Test') { steps { sh 'npm run test:js' } }
-                stage('Build') { steps { sh 'npm run build-assets:js' } }
+                stage('Build JS') { steps { sh 'npm run build-assets:js' } }
+                stage('Build CSS') { steps { sh 'npm run build-assets:css' } }
             }
         }
         stage('Test Build') { steps { sh 'npx bundlesize' } }
