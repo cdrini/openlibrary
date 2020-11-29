@@ -49,10 +49,10 @@ pipeline {
         }
         stage('Unit Tests') {
             parallel {
-                stage('Python 2 + Infogami master') {
+                stage('Python 2 + Infogami prod') {
                     environment {
                         PYENV_VERSION = '2.7.6'
-                        PYTHONPATH = "${env.WORKSPACE}/vendor/infogami-master"
+                        PYTHONPATH = "${env.WORKSPACE}/vendor/infogami"
                     }
                     steps { sh 'make test-py' }
                 }
