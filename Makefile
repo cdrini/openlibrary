@@ -85,3 +85,29 @@ test-py:
 
 test: 
 	make test-py && npm run test
+
+
+
+
+
+
+# A bunch of aliases for a performant Jenkinsfile
+lint-python: lint
+lint-js:
+	npm run lint:js
+lint-css:
+	npm run lint:css
+
+unit-test-python: test-py
+unit-test-js:
+	npm run test:js
+
+build-js: js
+build-css: css
+build-components: components
+build-i18n: i18n
+
+
+
+
+
