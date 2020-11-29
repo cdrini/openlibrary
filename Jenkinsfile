@@ -5,29 +5,66 @@ pipeline {
     stages {
         stage('Install') {
             parallel {
-                stage('Python') { steps { sh 'pip install -r requirements_test.txt' } }
+                stage('Python 2') {
+                    environment { PYENV_VERSION = '2.7.6' }
+                    steps { sh 'pip install -r requirements_test.txt' }
+                }
+                stage('Python 3') {
+                    environment { PYENV_VERSION = '3.8.6' }
+                    steps { sh 'pip install -r requirements_test.txt' }
+                }
                 stage('Node') { steps { sh 'npm install' } }
             }
         }
-        stage('Lint') {
-            parallel {
-                stage('Python') { steps { sh 'make lint' } }
-                stage('JS') { steps { sh 'npm run lint:js' } }
-                stage('CSS') { steps { sh 'npm run lint:css' } }
-            }
-        }
-        stage('Unit Tests') {
-            parallel {
-                stage('Python') { steps { sh 'make test-py' } }
-                stage('JS') { steps { sh 'npm run test:js' } }
-            }
-        }
-        stage('Build') {
-            parallel {
-                stage('JS') { steps { sh 'make js' } }
-                stage('CSS') { steps { sh 'make css' } }
-                stage('Components') { steps { sh 'make components' } }
-                stage('i18n') { steps { sh 'make i18n' } }
+        stage('Pre-build & Build') {
+            matrix {
+                axes {
+                    axis {
+                        name 'VERB'
+                        values 'lint', 'unit-test', 'build'
+                    }
+                    axis {
+                        name 'OBJECT'
+                        values 'python', 'js', 'css', 'components', 'i18n'
+                    }
+                }
+                excludes {
+                    exclude {
+                        axis {
+                            name 'VERB'
+                            values 'lint'
+                        }
+                        axis {
+                            name 'OBJECT'
+                            values 'components', 'i18n'
+                        }
+                    }
+                    exclude {
+                        axis {
+                            name 'VERB'
+                            values 'unit-test'
+                        }
+                        axis {
+                            name 'OBJECT'
+                            values 'css', 'components', 'i18n'
+                        }
+                    }
+                    exclude {
+                        axis {
+                            name 'VERB'
+                            values 'build'
+                        }
+                        axis {
+                            name 'OBJECT'
+                            values 'python'
+                        }
+                    }
+                }
+                stages {
+                    stage("$VERB $OBJECT") {
+                        steps { sh "make ${VERB}-${OBJECT}" }
+                    }
+                }
             }
         }
         stage('Test Build') { steps { sh 'npx bundlesize' } }
