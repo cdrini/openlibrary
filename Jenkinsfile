@@ -9,6 +9,7 @@ pipeline {
                 // Remove the symlink in this directory; that's what makes it available
                 sh 'rm infogami'
                 // Make a master version
+                sh 'rm -r vendor/infogami-master'
                 sh 'git clone https://github.com/internetarchive/infogami.git vendor/infogami-master'
 
                 // Also: Don't need node_modules from scratch; use the one in the docker image
