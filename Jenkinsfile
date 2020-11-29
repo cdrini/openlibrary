@@ -49,17 +49,29 @@ pipeline {
         }
         stage('Unit Tests') {
             parallel {
-                stage('Python 2 + Infogami prod') {
-                    environment { PYENV_VERSION = '2.7.6' }
-                    steps { sh "PYTHONPATH='${env.WORKSPACE}/vendor/infogami' make test-py" }
+                stage('Python 2 + Infogami master') {
+                    environment {
+                        PYENV_VERSION = '2.7.6'
+                        PYTHONPATH = "${env.WORKSPACE}/vendor/infogami-master"
+                    }
+                    steps { sh 'make test-py' }
                 }
                 stage('Python 2 + Infogami master') {
-                    environment { PYENV_VERSION = '2.7.6' }
-                    steps { sh "PYTHONPATH='${env.WORKSPACE}/vendor/infogami-master' make test-py" }
+                    environment {
+                        PYENV_VERSION = '2.7.6'
+                        PYTHONPATH = "${env.WORKSPACE}/vendor/infogami-master"
+                    }
+                    steps { sh 'make test-py' }
                 }
                 stage('Python 3') {
-                    environment { PYENV_VERSION = '3.8.6' }
-                    steps { sh "PYTHONPATH='${env.WORKSPACE}/vendor/infogami-master' make test-py" }
+                    environment {
+                        PYENV_VERSION = '3.8.6'
+                        PYTHONPATH = "${env.WORKSPACE}/vendor/infogami-master"
+                    }
+                    steps {
+                        dir('vendor/infogami') { sh 'git pull origin master' }
+                        sh 'make test-py'
+                    }
                 }
                 stage('JS') { steps { sh 'npm run test:js' } }
             }
