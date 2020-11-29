@@ -61,8 +61,10 @@ pipeline {
                     }
                 }
                 stages {
-                    stage("$VERB $OBJECT") {
-                        steps { sh "make ${VERB}-${OBJECT}" }
+                    stage('Pre-build or Build') {
+                        steps {
+                            sh "make ${VERB}-${OBJECT}"
+                        }
                     }
                 }
             }
