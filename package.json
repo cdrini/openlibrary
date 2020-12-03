@@ -40,6 +40,7 @@
     "eslint-plugin-vue": "6.2.2",
     "flot": "0.8.3",
     "jest": "26.4.2",
+    "jest-junit": "12.0.0",
     "jquery": "1.11.0",
     "jquery-migrate": "1.2.1",
     "jquery-ui": "1.12.1",
@@ -76,6 +77,18 @@
         "statements": 3
       }
     },
-    "collectCoverage": true
+    "collectCoverage": true,
+    "coverageReporters": [
+      "text"
+    ],
+    "reporters": [
+      "default",
+      "jest-junit"
+    ]
+  },
+  "jest-junit": {
+    "usePathForSuiteName": true,
+    "outputDirectory": "coverage",
+    "outputName": "jest-junit.xml"
   }
 }

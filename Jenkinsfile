@@ -67,7 +67,10 @@ pipeline {
                     }
                     steps { sh 'make test-py' }
                 }
-                stage('JS') { steps { sh 'npm run test:js' } }
+                stage('JS') {
+                    steps { sh 'npm run test:js' }
+                    post { always { junit 'coverage/jest-junit.xml' } }
+                }
             }
         }
         stage('Build') {
