@@ -642,17 +642,21 @@ def works_by_author(akey, sort='editions', page=1, rows=100, has_fulltext=False,
         'first_publish_year', 'public_scan_b', 'lending_edition_s', 'lending_identifier_s',
         'ia_collection_s', 'cover_i']
     fl = ','.join(fields)
-    fqs = ['author_key:' + akey, 'type:work']
+
+    params = [
+        ('fq', 'author_key:' + akey),
+        ('fq', 'type:work'),
+        ('q', q),
+        ('start', offset),
+        ('rows', rows),
+        ('fl', fl),
+        ('wt', 'json'),
+        ('q.op', 'AND'),
+    ]
     if has_fulltext:
-        fqs.append('has_fulltext:true')
-    params = {
-        'q': q,
-        'start': offset,
-        'rows': rows,
-        'fl': fl,
-    }
-    solr_select = solr_select_url + "?wt=json&q.op=AND&fq=" + '&fq='.join(fqs)
-    solr_select += "&" + urllib.parse.urlencode(params, 'utf-8')
+        params.append(('fq', 'has_fulltext:true'))
+
+    solr_select = solr_select_url + "?" + urllib.parse.urlencode(params)
     facet_fields = [
         "author_facet", "language", "publish_year", "publisher_facet",
         "subject_facet", "person_facet", "place_facet", "time_facet"
