@@ -222,7 +222,7 @@ pipeline {
               post {
                 always {
                   dir(env.HOST_SOLR_BUILDER_DIR) {
-                    sh '''for name in $(ls logs/work-orphans); do docker logs ${name/.txt/} 2>&1; done | gzip > logs/works-orphans-indexing.log.gz'''
+                    sh '''for name in $(ls logs/works-orphans); do docker logs ${name/.txt/} 2>&1; done | gzip > logs/works-orphans-indexing.log.gz'''
                     archiveArtifacts artifacts: "logs/works-orphans-indexing.log.gz"
                     sh '''for name in $(ls logs/authors); do docker logs ${name/.txt/} 2>&1; done | gzip > logs/authors-indexing.log.gz'''
                     archiveArtifacts artifacts: "logs/authors-indexing.log.gz"
