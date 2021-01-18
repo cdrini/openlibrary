@@ -1,6 +1,7 @@
 from __future__ import division
 
 import asyncio
+import gc
 from typing import Awaitable, List, Iterable
 
 from six.moves.configparser import ConfigParser
@@ -275,6 +276,7 @@ class LocalPostgresDataProvider(DataProvider):
     def clear_cache(self):
         self.cache = dict()
         self.ia_cache = dict()
+        gc.collect()
         pass
 
 
