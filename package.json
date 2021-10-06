@@ -31,7 +31,8 @@
     "test": "npm run test:js && bundlesize",
     "test:js": "jest --testRegex tests/unit/**/test.*.js",
     "storybook": "start-storybook -p 6006",
-    "build-storybook": "build-storybook"
+    "build-storybook": "build-storybook",
+    "deploy-storybook": "storybook-to-ghpages --ci --branch=storybook"
   },
   "devDependencies": {
     "@babel/core": "7.14.8",
@@ -41,6 +42,7 @@
     "@storybook/addon-actions": "6.3.8",
     "@storybook/addon-essentials": "6.3.8",
     "@storybook/addon-links": "6.3.8",
+    "@storybook/storybook-deployer": "2.8.10",
     "@storybook/vue": "6.3.8",
     "@vue/cli": "4.5.13",
     "@vue/cli-plugin-babel": "4.5.13",
@@ -51,7 +53,7 @@
     "bundlesize": "0.18.1",
     "chart.js": "2.9.4",
     "chartjs-plugin-datalabels": "0.7.0",
-    "core-js": "3.16.0",
+    "core-js": "3.18.2",
     "css-loader": "5.2.7",
     "datatables.net-dt": "1.10.25",
     "details-polyfill": "1.2.0",
