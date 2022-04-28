@@ -85,6 +85,8 @@ ALL_FIELDS = [
     "ddc",
     "lcc_sort",
     "ddc_sort",
+    # Custom fields
+    "like",
 ]
 FACET_FIELDS = [
     "has_fulltext",
@@ -98,6 +100,14 @@ FACET_FIELDS = [
     "time_facet",
     "public_scan_b",
 ]
+
+
+class CustomField:
+    def __init__(self, name: str, rewrite):
+        self.name = name
+        self.rewrite = rewrite
+
+
 FIELD_NAME_MAP = {
     'author': 'author_name',
     'authors': 'author_name',
@@ -108,6 +118,7 @@ FIELD_NAME_MAP = {
     #**({'title': 'alternative_title'} if get_solr_next() else {}),
     'work_subtitle': 'subtitle',
     'work_title': 'title',
+    'like': CustomField('like', rewrite=lambda val: f'({{!mlt qf=subject v="{val}"}})'),
     # "Private" fields
     # This is private because we'll change it to a multi-valued field instead of a
     # plain string at the next opportunity, which will make it much more usable.
@@ -332,7 +343,9 @@ def parse_query_fields(q):
         op_found = None
         f = found[field_num]
         field_name = q[f[0] : f[1] - 1].lower()
-        if field_name in FIELD_NAME_MAP:
+        if field_name in FIELD_NAME_MAP and not isinstance(
+            FIELD_NAME_MAP[field_name], CustomField
+        ):
             field_name = FIELD_NAME_MAP[field_name]
         if field_num == len(found) - 1:
             v = q[f[1] :].strip()
@@ -352,6 +365,12 @@ def parse_query_fields(q):
             v = ddc_transform(v)
         if field_name == 'ia_collection_s':
             v = ia_collection_s_transform(v)
+        if isinstance(FIELD_NAME_MAP.get(field_name), CustomField):
+            yield {
+                'type': 'query_parser',
+                'value': FIELD_NAME_MAP[field_name].rewrite(v),
+            }
+            continue
 
         yield {'field': field_name, 'value': v.replace(':', r'\:')}
         if op_found:
@@ -375,7 +394,11 @@ def build_q_list(param):
             q_list.append(q_param.strip())
         elif re_fields.search(q_param):
             q_list.extend(
-                i['op'] if 'op' in i else '{}:({})'.format(i['field'], i['value'])
+                i['op']
+                if 'op' in i
+                else i['value']
+                if i.get('type') == 'query_parser'
+                else '{}:({})'.format(i['field'], i['value'])
                 for i in parse_query_fields(q_param)
             )
         else:
@@ -519,17 +542,26 @@ def run_solr_query(
                 'ia_box_id': 'ia_box_id',
             }
             if True or use_dismax:
-                work_query = (
-                    '''{{!edismax q.op="AND" qf="{qf}" bf="{bf}"}}({q})'''.format(
-                        q=' '.join(q_list),
-                        qf='text alternative_title^20 author_name^20',
-                        bf='min(100,edition_count)',
-                    )
-                )
-                params.append(('q', work_query))
+                dismax_terms = [term for term in q_list if not term.startswith('({!')]
+                non_dismax_terms = [term for term in q_list if term.startswith('({!')]
+                if dismax_terms:
+                    all_dismax_are_fields = all(':' in term for term in dismax_terms)
+                    if all_dismax_are_fields:
+                        non_dismax_terms.append(
+                            '{!q.op="AND" v="%(v)s"}' % {'v': ' '.join(dismax_terms)}
+                        )
+                    else:
+                        non_dismax_terms.append(
+                            '''({{!edismax q.op="AND" qf="{qf}" bf="{bf}" v="{q}"}})'''.format(
+                                q=' '.join(dismax_terms),
+                                qf='text alternative_title^20 author_name^20',
+                                bf='min(100,edition_count)',
+                            )
+                        )
+                params.append(('q', ' AND '.join(non_dismax_terms)))
 
                 ed_q_list = []
-                for q in q_list:
+                for q in dismax_terms:
                     if ':' not in q:
                         ed_q_list.append(q)
                         continue
