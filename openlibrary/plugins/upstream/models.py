@@ -21,7 +21,7 @@ from openlibrary.core import lending
 from openlibrary.plugins.upstream.utils import MultiDict, parse_toc, get_edition_config
 from openlibrary.plugins.upstream import account
 from openlibrary.plugins.upstream import borrow
-from openlibrary.plugins.worksearch.code import works_by_author, sorted_work_editions
+from openlibrary.plugins.worksearch.code import works_by_author
 from openlibrary.plugins.worksearch.search import get_solr
 
 from openlibrary.utils import dateutil
@@ -61,38 +61,6 @@ class Edition(models.Edition):
         authors = [follow_redirect(a) for a in self.authors]
         authors = [a for a in authors if a and a.type.key == "/type/author"]
         return authors
-
-    def get_next(self):
-        """Next edition of work"""
-        if len(self.get('works', [])) != 1:
-            return
-        wkey = self.works[0].get_olid()
-        if not wkey:
-            return
-        editions = sorted_work_editions(wkey)
-        try:
-            i = editions.index(self.get_olid())
-        except ValueError:
-            return
-        if i + 1 == len(editions):
-            return
-        return editions[i + 1]
-
-    def get_prev(self):
-        """Previous edition of work"""
-        if len(self.get('works', [])) != 1:
-            return
-        wkey = self.works[0].get_olid()
-        if not wkey:
-            return
-        editions = sorted_work_editions(wkey)
-        try:
-            i = editions.index(self.get_olid())
-        except ValueError:
-            return
-        if i == 0:
-            return
-        return editions[i - 1]
 
     def get_covers(self):
         """
@@ -539,6 +507,7 @@ class Author(models.Author):
             rows=i.rows,
             has_fulltext=i.mode == "ebooks",
             query=q,
+            facet=True,
         )
 
     def get_work_count(self):
@@ -702,13 +671,13 @@ class Work(models.Work):
     def get_related_books_subjects(self, filter_unicode=True):
         return self.filter_problematic_subjects(self.get_subjects(), filter_unicode)
 
-    def get_representative_edition(self):
+    def get_representative_edition(self) -> str | None:
         """When we have confidence we can direct patrons to the best edition
         of a work (for them), return qualifying edition key. Attempts
         to find best (most available) edition of work using
         archive.org work availability API. May be extended to support language
 
-        :rtype str: infogami edition key or url which resolves to an edition
+        :rtype str: infogami edition key or url which resolves to an edition or None
         """
         work_id = self.key.replace('/works/', '')
         availability = lending.get_work_availability(work_id)
@@ -716,13 +685,14 @@ class Work(models.Work):
             if 'openlibrary_edition' in availability[work_id]:
                 return '/books/%s' % availability[work_id]['openlibrary_edition']
 
-    def get_sorted_editions(self, ebooks_only=False, limit=None, keys=None):
+        return None
+
+    def get_sorted_editions(
+        self, ebooks_only: bool = False, limit: int = None, keys: list[str] = None
+    ) -> list[Edition]:
         """
         Get this work's editions sorted by publication year
-        :param bool ebooks_only:
-        :param int limit:
         :param list[str] keys: ensure keys included in fetched editions
-        :rtype: list[Edition]
         """
         db_query = {"type": "/type/edition", "works": self.key}
         db_query['limit'] = limit or 10000
