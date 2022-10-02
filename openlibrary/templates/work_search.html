@@ -248,9 +248,9 @@ $elif param and len(docs):
                        $ display = _('yes')
                     $else:
                        $ display = _('no')
-                    <span class="small"><a href="$add_facet_url(header, k)" data-ol-link-track="search_facet_track(header)" title="$_('Filter results for ebook availability')">$display</a></span>&nbsp;<span class="smaller gray">$commify(count)</span>
+                    <span class="small"><a href="$add_facet_url(header, k)" data-ol-link-track="$search_facet_track(header)" title="$_('Filter results for ebook availability')">$display</a></span>&nbsp;<span class="smaller gray">$commify(count)</span>
                 $else:
-                    <span class="small"><a href="$add_facet_url(header, k)" data-ol-link-track="search_facet_track(header)" title="$_('Filter results for %(facet)s', facet=display)">$display</a></span>&nbsp;<span class="smaller gray">$commify(count)</span>
+                    <span class="small"><a href="$add_facet_url(header, k)" data-ol-link-track="$search_facet_track(header)" title="$_('Filter results for %(facet)s', facet=display)">$display</a></span>&nbsp;<span class="smaller gray">$commify(count)</span>
                 </div>
             $if len(counts) > start_facet_count:
                 <div class="facetMoreLess">
