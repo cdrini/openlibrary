@@ -1,4 +1,4 @@
-$def with (doc, decorations=None, cta=True, availability=None, extra=None, attrs=None, rating=None, show_librarian_extras=False, include_dropper=False, blur=False, footer=None)
+$def with (doc, decorations=None, cta=True, availability=None, extra=None, attrs=None, rating=None, show_librarian_extras=False, include_dropper=False, blur=False, footer=None, series=None)
 
 $code:
   max_rendered_authors = 9
@@ -53,6 +53,10 @@ $code:
     </span>
 
     <div class="details">
+        $if series:
+          <div class="sri__series" style="font-size: 12px; line-height:1em;">
+            <a href="$series.url()" style="font-weight: bold;">$series.name:</a> $_('Book %s', series.index_of_seed(doc.key) + 1)
+          </div>
         <div class="resultTitle">
           <h3 itemprop="name" class="booktitle">
             <a itemprop="url" href="$work_edition_url" class="results">$full_title</a>

@@ -1,5 +1,6 @@
 """Lists implementation.
 """
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 import json
 from urllib.parse import parse_qs
@@ -563,6 +564,32 @@ def get_list_seeds(key):
             "size": len(seeds),
             "entries": seeds,
         }
+
+
+@public
+def get_work_series(keys: list[ThingKey]):
+    list_keys: list[tuple[str, list[str]]] = []
+    for key in keys:
+        list_keys.append((
+            key,
+            web.ctx.site.things({
+                "type": "/type/list",
+                "seeds.thing": {"key": key},
+            }) or web.ctx.site.things({
+                "type": "/type/list",
+                "seeds": {"key": key},
+            })
+        ))
+
+    docs = {
+        doc.key: doc
+        for doc in web.ctx.site.get_many([lists[0] for _, lists in list_keys if lists])
+    }
+    for key, lists in list_keys:
+        if not lists:
+            yield None
+        else:
+            yield docs.get(lists[0])
 
 
 class list_seeds(delegate.page):

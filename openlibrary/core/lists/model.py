@@ -113,7 +113,7 @@ class List(Thing):
         """Adds a new seed to this list."""
         seed_object = Seed.from_json(self, seed)
 
-        if self._index_of_seed(seed_object.key) >= 0:
+        if self.index_of_seed(seed_object.key) >= 0:
             return False
         else:
             self.seeds = self.seeds or []
@@ -125,13 +125,13 @@ class List(Thing):
     ):
         """Removes a seed for the list."""
         seed_key = Seed.from_json(self, seed).key
-        if (index := self._index_of_seed(seed_key)) >= 0:
+        if (index := self.index_of_seed(seed_key)) >= 0:
             self.seeds.pop(index)
             return True
         else:
             return False
 
-    def _index_of_seed(self, seed_key: str) -> int:
+    def index_of_seed(self, seed_key: str) -> int:
         for i, s in enumerate(self._get_seed_strings()):
             if s == seed_key:
                 return i

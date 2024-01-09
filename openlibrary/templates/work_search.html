@@ -177,9 +177,10 @@ $ )
 
             $# Subject key list will only be included in each doc if the patron has a sfw cookie
             $ subject_keys = [d.get('subject', []) for d in search_response.docs]
-            $for work, subjects in zip(works, subject_keys):
+            $ work_series = get_work_series(w.get('key') for w in works)
+            $for work, subjects, series in zip(works, subject_keys, work_series):
                 $ content_warning = len([s for s in subjects if s.startswith("content_warning:")]) != 0
-                $:macros.SearchResultsWork(work, show_librarian_extras=show_librarian_extras, include_dropper=True, blur=content_warning)
+                $:macros.SearchResultsWork(work, show_librarian_extras=show_librarian_extras, include_dropper=True, blur=content_warning, series=series)
           </ul>
           $:macros.Pager(page, search_response.num_found, rows)
         </div>
