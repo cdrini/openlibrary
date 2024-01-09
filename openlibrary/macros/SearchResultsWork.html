@@ -55,7 +55,14 @@ $code:
     <div class="details">
         $if series:
           <div class="sri__series" style="font-size: 12px; line-height:1em;">
-            <a href="$series.url()" style="font-weight: bold;">$series.name:</a> $_('Book %s', series.index_of_seed(doc.key) + 1)
+            $ book_label = series.format_book_label(doc.key)
+            $if series.url() != ctx.path:
+              <a
+                href="$series.url()"
+                style="font-weight: bold;"
+                data-ol-link-track="BookCard|SeriesLink"
+              >$series.name$cond(book_label, ':')</a>
+            $book_label
           </div>
         <div class="resultTitle">
           <h3 itemprop="name" class="booktitle">

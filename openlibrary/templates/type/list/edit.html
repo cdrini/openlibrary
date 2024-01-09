@@ -123,6 +123,31 @@ $jsdef lazy_thing_preview(key, render_fn_name):
 
         <hr />
 
+        <div class="formElement">
+            $_('List Type:')
+            <label>
+                <input type="radio" name="list_type" value="user" $cond(not lst.list_type, 'checked') />
+                $_('User List')
+            </label>
+            <label>
+                <input type="radio" name="list_type" value="series" $cond(lst.list_type == 'series', 'checked') />
+                $_('Series')
+            </label>
+        </div>
+
+        $if lst.list_type == 'series':
+            <div class="formElement">
+                $_('Book Label:')
+                <select name="seed_label">
+                    <option value="book" $cond(lst.seed_label == 'book', 'selected')>$_('Book #')</option>
+                    <option value="volume" $cond(lst.seed_label == 'volume', 'selected')>$_('Volume #')</option>
+                    <option value="issue" $cond(lst.seed_label == 'issue', 'selected')>$_('Issue #')</option>
+                    <option value="none" $cond(lst.seed_label == 'none', 'selected')>$_('None')</option>
+                </select>
+            </div>
+
+        <hr />
+
         <ol class="list-edit__items multi-input-autocomplete--seeds">
             $if lst.seeds:
                 $for i, seed in enumerate(lst.seeds):

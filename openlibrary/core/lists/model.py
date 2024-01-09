@@ -2,7 +2,7 @@
 """
 from collections.abc import Iterable
 from functools import cached_property
-from typing import TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 import web
 import logging
@@ -14,6 +14,7 @@ from infogami.utils import stats
 from openlibrary.core import helpers as h
 from openlibrary.core import cache
 from openlibrary.core.models import Image, Subject, Thing, ThingKey
+from openlibrary.i18n import gettext as _
 from openlibrary.plugins.upstream.models import Author, Changeset, Edition, User, Work
 
 from openlibrary.plugins.worksearch.search import get_solr
@@ -83,6 +84,8 @@ class List(Thing):
     seeds: list[Thing | SeedSubjectString | AnnotatedSeedThing]
     """Members of the list. Either references or subject strings."""
 
+    seed_label: Literal['book', 'volume', 'issue', 'none'] | None
+
     def url(self, suffix="", **params):
         return self.get_url(suffix, **params)
 
@@ -95,6 +98,24 @@ class List(Thing):
             return cast(User, self._site.get(key))
         else:
             return None
+
+    def format_book_label(self, seed_key: ThingKey) -> str:
+        """
+        Returns a string that can be used to label a book in a list.
+        """
+
+        index = self.index_of_seed(seed_key) + 1
+        match self.seed_label or 'book':
+            case 'book':
+                return _("Book %s", index)
+            case 'volume':
+                return _("Volume %s", index)
+            case 'issue':
+                return _("Issue %s", index)
+            case 'none':
+                return ''
+            case _:
+                raise ValueError(f"Invalid seed label: {self.seed_label!r}")
 
     def get_cover(self):
         """Returns a cover object."""

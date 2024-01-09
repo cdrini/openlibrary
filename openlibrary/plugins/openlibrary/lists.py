@@ -63,7 +63,11 @@ class ListRecord:
     key: str | None = None
     name: str = ''
     description: str = ''
+    list_type: Literal['user', 'series'] = 'user'
     seeds: list[Seed] = field(default_factory=list)
+
+    # Series specific fields
+    seed_label: Literal['book', 'volume', 'issue', 'none'] = 'book'
 
     @staticmethod
     def normalize_input_seed(
@@ -100,7 +104,9 @@ class ListRecord:
             'key': None,
             'name': '',
             'description': '',
+            'list_type': 'user',
             'seeds': [],
+            'seed_label': 'book',
         }
         if data := web.data():
             # If the requests has data, parse it and use it to populate the list
@@ -133,7 +139,9 @@ class ListRecord:
             key=i['key'],
             name=i['name'],
             description=i['description'],
+            list_type=i['list_type'],
             seeds=normalized_seeds,
+            seed_label=i['seed_label'],
         )
 
     def to_thing_json(self):
@@ -142,7 +150,9 @@ class ListRecord:
             "type": {"key": "/type/list"},
             "name": self.name,
             "description": self.description,
+            **({"list_type": self.list_type} if self.list_type != 'user' else {}),
             "seeds": self.seeds,
+            **({"seed_label": self.seed_label} if self.seed_label != 'book' else {}),
         }
 
 
