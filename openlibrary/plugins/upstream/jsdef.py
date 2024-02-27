@@ -101,11 +101,7 @@ class JSNode:
         self._count = 0
 
     def emit(self, indent, text_indent=""):
-        # Code generation logic is changed in version 0.34
-        if web.__version__ < "0.34":
-            return indent[4:] + 'yield "", %s\n' % repr(self.jsemit(self.node, ""))
-        else:
-            return indent[4:] + 'self.extend(%s)\n' % repr(self.jsemit(self.node, ""))
+        return indent[4:] + 'self.extend(%s)\n' % repr(self.jsemit(self.node, ""))
 
     def jsemit(self, node, indent):
         r"""Emit Javascript for given node.::
@@ -229,7 +225,13 @@ def py2js(expr):
     >>> py2js("x or not y")
     'x || ! y'
     """
-    d = {"and": "&&", "or": "||", "not": "!"}
+    d = {
+        "and": "&&",
+        "or": "||",
+        "not": "!",
+        "True": "true",
+        "False": "false",
+    }
 
     def f(tokens):
         for t in tokens:

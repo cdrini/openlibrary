@@ -218,6 +218,7 @@ def split_dump(dump_file=None, format="oldump_%s.txt"):
         "/type/work",
         "/type/redirect",
         "/type/list",
+        "/type/series",
     )
     files = {}
     for t in types:
@@ -248,7 +249,7 @@ def make_index(dump_file):
         if type in ("/type/edition", "/type/work"):
             title = data.get("title", "untitled")
             path = key + "/" + urlsafe(title)
-        elif type in ("/type/author", "/type/list"):
+        elif type in ("/type/author", "/type/list", "/type/series"):
             title = data.get("name", "unnamed")
             path = key + "/" + urlsafe(title)
         else:

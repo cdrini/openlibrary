@@ -142,6 +142,13 @@ export function htmlquote(text) {
     return text;
 }
 
+export function jsdef_get(obj, key, def=null) {
+    return (key in obj) ? obj[key] : def;
+}
+
+/**
+ * Returns true if executing in JS environment.
+ */
 export function is_jsdef() {
     return true;
 }

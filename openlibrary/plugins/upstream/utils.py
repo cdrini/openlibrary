@@ -1438,6 +1438,11 @@ def is_jsdef():
 
 
 @public
+def jsdef_get(obj, key, default=None):
+    return obj.get(key, default)
+
+
+@public
 def get_donation_include() -> str:
     ia_host = get_ia_host(allow_dev=True)
     # The following allows archive.org staff to test banners without

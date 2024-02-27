@@ -164,7 +164,7 @@ class DataProvider:
                         'page': 1,
                         'output': 'json',
                         'save': 'yes',
-                        'service': 'metadata__unlimited',
+                        # 'service': 'metadata__unlimited',
                     },
                 )
             r.raise_for_status()

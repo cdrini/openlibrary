@@ -23,6 +23,7 @@ class TestModels:
             '/type/person': models.SubjectPerson,
             '/type/user': models.User,
             '/type/list': list_model.List,
+            '/type/series': list_model.List,
         }
         expected_changesets = {
             None: models.Changeset,

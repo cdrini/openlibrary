@@ -8,7 +8,7 @@
       "name": "Python: Attach",
       "type": "python",
       "request": "attach",
-      "port": 3000,
+      "port": 30001,
       "host": "localhost",
       "pathMappings": [
         {

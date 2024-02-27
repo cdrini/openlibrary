@@ -1,6 +1,12 @@
 $def with (lst, new=False, admin_only=False)
 $putctx('cssfile', 'list-edit')
-$var title: $(_("Create a list") if new else _("Editing list: %(list_name)s", list_name=lst.name))
+$code:
+    page_title = (
+        (_("Create a series") if new else _("Editing series: %(series_name)s", series_name=lst.name))
+        if lst.type['key'] == '/type/series' else
+        (_("Create a list") if new else _("Editing list: %(list_name)s", list_name=lst.name))
+    )
+$var title: $page_title
 
 $putctx("robots", "noindex,nofollow")
 
@@ -10,7 +16,10 @@ $if admin_only:
 
 <div id="contentHead">
     $:macros.databarEdit(lst)
-    <h1>$(_("Create a list") if new else _("Edit List"))</h1>
+    $if lst.type['key'] == '/type/series':
+        <h1>$(_("Create a series") if new else _("Edit Series"))</h1>
+    $else:
+        <h1>$(_("Create a list") if new else _("Edit List"))</h1>
 
     $if admin_only:
         <b class="warning">
@@ -20,8 +29,9 @@ $if admin_only:
 
 $# Render the ith seed input field
 $jsdef render_seed_field(i, seed):
-    $# Note: Cannot use "in" because this is a jsdef function
-    $if seed['key'] or seed['key']:
+    $# seed['key'] errors in python; seed.get('key') errors in js. So need
+    $# to run different code on the server and client.
+    $if jsdef_get(seed, 'key'):
         $ seed = { 'thing': seed, 'notes': '' }
 
     $ key = ''
@@ -58,7 +68,41 @@ $jsdef render_seed_field(i, seed):
                     $key
             </div>
 
-            <textarea name="seeds--$i--notes" placeholder="$_('Notes (optional)')">$(seed['notes'] or '')</textarea>
+            $if 1:
+                <hr>
+                $_('Position:')
+                <span>
+                    <label>
+                        <input
+                            type="radio"
+                            value="auto"
+                            name="_seeds--$i--position-type"
+                            $cond(not jsdef_get(seed, 'position'), 'checked')
+                        /><span class="mia__index">$_('Auto: #%d' % (i + 1))</span>
+                    </label>
+                    <label>
+                        <input
+                            type="radio"
+                            value="auto"
+                            name="_seeds--$i--position-type"
+                            $cond(jsdef_get(seed, 'position'), 'checked')
+                        />$_('Custom')
+                        <input
+                            name="seeds--$i--position"
+                            placeholder="$_('e.g. 1, 1-5, Prequel')"
+                            value="$jsdef_get(seed, 'position', '')"
+                        />
+                    </label>
+                </span>
+                <br>
+                <label>
+                    <input type="checkbox" name="seeds--$i--primary" $cond(jsdef_get(seed, 'primary', True), 'checked') /> $_('Primary')
+                </label>
+                <label>
+                    <input type="checkbox" name="seeds--$i--compendium" $cond(jsdef_get(seed, 'compendium'), 'checked') /> $_('Compendium')
+                </label>
+            $else:
+                <textarea name="seeds--$i--notes" placeholder="$_('Notes (optional)')">$(seed['notes'] or '')</textarea>
         </main>
     </li>
 
@@ -107,7 +151,14 @@ $jsdef lazy_thing_preview(key, render_fn_name):
 
         <input
             required
-            placeholder="$_('List Name')"
+            type="hidden"
+            name="type--key"
+            value="$lst.type['key']"
+        />
+
+        <input
+            required
+            placeholder="$cond(lst.type['key'] == '/type/series', _('Series name'), _('List name'))"
             name="name"
             value="$lst.name"
         />
@@ -123,19 +174,7 @@ $jsdef lazy_thing_preview(key, render_fn_name):
 
         <hr />
 
-        <div class="formElement">
-            $_('List Type:')
-            <label>
-                <input type="radio" name="list_type" value="user" $cond(not lst.list_type, 'checked') />
-                $_('User List')
-            </label>
-            <label>
-                <input type="radio" name="list_type" value="series" $cond(lst.list_type == 'series', 'checked') />
-                $_('Series')
-            </label>
-        </div>
-
-        $if lst.list_type == 'series':
+        $if lst.type['key'] == '/type/series':
             <div class="formElement">
                 $_('Book Label:')
                 <select name="seed_label">
@@ -155,7 +194,7 @@ $jsdef lazy_thing_preview(key, render_fn_name):
                         $ seed = {'key': '/subjects/' + seed}
                     $:render_seed_field(i, seed)
             $else:
-                $:render_seed_field(0, {'key': ''})
+                $:render_seed_field(0, {'thing': {'key': ''}, 'notes': ''})
             <a href="javascript:;" class="mia__add">$_('Add another book')</a>
         </ol>
 
@@ -163,7 +202,12 @@ $jsdef lazy_thing_preview(key, render_fn_name):
 
         <div class="formElement bottom">
             $if new:
-                <button type="submit" class="larger" $cond(not can_save, 'disabled')>$_('Create new list')</button>
+                <button type="submit" class="larger" $cond(not can_save, 'disabled')>
+                    $if lst.type['key'] == '/type/series':
+                        $_('Create new series')
+                    $else:
+                        $_('Create new list')
+                </button>
             $else:
                 $:macros.EditButtons(comment=lst.comment_)
         </div>

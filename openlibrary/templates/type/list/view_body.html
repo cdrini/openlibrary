@@ -32,9 +32,6 @@ $add_metatag(property="og:image", content=request.canonical_url + "/preview.png"
 $set_share_links(url=request.canonical_url, title=title, view_context=ctx)
 $ sort = query_param('sort', None)
 
-$jsdef render_seed_count(seed_count):
-    $ungettext("%(count)d item", "%(count)d items", seed_count, count=seed_count)
-
 $if not is_owner:
     <div id="contentHead" style="margin-bottom:0;">
         $ owner = list.get_owner()
@@ -47,9 +44,7 @@ $if not is_owner:
         </div>
         <h1>$list.name</h1>
         <p class="collapse sansserif">
-            $ component_times['render_seed_count'] = time()
-            <span class="darkgreen" id="list-items-count"><strong>$:render_seed_count(len(list.seeds))</strong></span>
-            $ component_times['render_seed_count'] = time() - component_times['render_seed_count']
+            <span class="darkgreen" id="list-items-count"><strong>$list.book_count_string()</strong></span>
         </p>
     </div>
 
@@ -88,98 +83,120 @@ $def seed_attrs(seed):
             $for a in authors:
                 <a href="$a.url()" class="results">$a.name</a>$cond(loop.last, "", ", ")
 
-    <div class="mybooks-list">
+    <style>
+        .flex-contentThirds {
+            display: flex;
+            gap: 10px;
+        }
 
-        $if list.description:
-            $:format(list.description)
+        .flex-contentThirds > .flex-contentTwoThird {
+            flex: 5;
+        }
 
-        $:render_template("search/sort_options.html", selected_sort=sort, default_sort='index', search_scheme="lists_seeds")
-        $:macros.Pager(page+1, len(list.seeds), page_size)
-        <div class="clearfix"></div>
+        .flex-contentThirds > .flex-contentOneThird {
+            flex: 2;
+        }
+    </style>
 
-        <ul id="listResults" class="list-books clearfix">
-            $ component_times['get_seeds'] = time()
-            $ seeds = list.get_seeds(sort=(sort == 'last_modified'), resolve_redirects=True)[page*page_size:page*page_size+page_size]
-            $ component_times['get_seeds'] = time() - component_times['get_seeds']
+    <div class="flex-contentThirds">
+        <div class="mybooks-list flex-contentTwoThird">
 
-        $if not seeds:
-            <p>$_("There are no items on this list.")</p>
-            <p>
-                $:_('<a href="/search" target="_blank">Search for book, subjects, or authors</a> to add to your list.')
-                <a href="/help/faq/reading-log#lists" target="_blank">$_('Learn more.')</a>
-            </p>
+            $if list.description:
+                $:format(list.description)
 
-        $ solr_works = get_solr_works(s.key for s in seeds if s.type == 'work')
-        $ availabilities = get_availabilities([solr_works.get(seed.key) or seed.document for seed in seeds if seed.type in ['edition', 'work']])
-        $for seed in seeds:
-            $ default_image = "https://openlibrary.org/images/icons/avatar_book-sm.png"
-            $ cover = seed.get_cover()
-            $if cover:
-                $ cover_url = item_image(cover.url("M"), default=default_image)
-            $else:
-                $ cover_url = default_image
+            $if list.type['key'] == '/type/list':
+                $# Series currently can't be sorted by anything other than their index
+                $:render_template("search/sort_options.html", selected_sort=sort, default_sort='index', search_scheme="lists_seeds")
+            $:macros.Pager(page+1, len(list.seeds), page_size)
+            <div class="clearfix"></div>
 
-            $if seed.type in ['edition', 'work']:
-                $ use_my_books_droppers = 'my_books_dropper' in ctx.features
-                $ doc = solr_works.get(seed.key) or seed.document
-                $:macros.SearchResultsWork(doc, attrs=seed_attrs(seed), availability=availabilities.get(seed.key), decorations=remove_item_link(), extra=seed_meta_line(seed) if list.list_type != 'series' else None, include_dropper=use_my_books_droppers, footer=seed.notes and sanitize(format(seed.notes)), series=list if list.list_type == 'series' else None)
-            $else:
-                <li class="searchResultItem sri--w-main" $:seed_attrs(seed)>
-                    <div class="sri__main">
-                        <span class="bookcover">
-                            <a href="$seed.url">
-                            <img src="$cover_url" alt="$seed.title"/>
-                            </a>
-                        </span>
-                        <div class="details">
-                            <div class="resultTitle">
-                                <h3 class="booktitle">
-                                    <a href="$seed.url" class="results">$seed.title</a>
-                                </h3>
-                                $:seed_meta_line(seed)
+            <ul id="listResults" class="list-books clearfix">
+                $ component_times['get_seeds'] = time()
+                $ seeds = list.get_seeds(sort=(sort == 'last_modified'), resolve_redirects=True)[page*page_size:page*page_size+page_size]
+                $ component_times['get_seeds'] = time() - component_times['get_seeds']
+
+            $if not seeds:
+                <p>$_("There are no items on this list.")</p>
+                <p>
+                    $:_('<a href="/search" target="_blank">Search for book, subjects, or authors</a> to add to your list.')
+                    <a href="/help/faq/reading-log#lists" target="_blank">$_('Learn more.')</a>
+                </p>
+
+            $ solr_works = get_solr_works(s.key for s in seeds if s.type == 'work')
+            $ availabilities = get_availabilities([solr_works.get(seed.key) or seed.document for seed in seeds if seed.type in ['edition', 'work']])
+            $for seed in seeds:
+                $if list.type['key'] == '/type/series' and not seed.primary:
+                    $continue
+
+                $if seed.type in ['edition', 'work']:
+                    $ use_my_books_droppers = 'my_books_dropper' in ctx.features
+                    $ doc = solr_works.get(seed.key) or seed.document
+                    $:macros.SearchResultsWork(doc, attrs=seed_attrs(seed), availability=availabilities.get(seed.key), decorations=remove_item_link(), extra=seed_meta_line(seed) if list.list_type != 'series' else None, include_dropper=use_my_books_droppers, footer=seed.notes and sanitize(format(seed.notes)), series=list if list.list_type == 'series' else None)
+                $else:
+                    $ default_image = "https://openlibrary.org/images/icons/avatar_book-sm.png"
+                    $ cover = seed.get_cover()
+                    $if cover:
+                        $ cover_url = item_image(cover.url("M"), default=default_image)
+                    $else:
+                        $ cover_url = default_image
+                    <li class="searchResultItem sri--w-main" $:seed_attrs(seed)>
+                        <div class="sri__main">
+                            <span class="bookcover">
+                                <a href="$seed.url">
+                                <img src="$cover_url" alt="$seed.title"/>
+                                </a>
+                            </span>
+                            <div class="details">
+                                <div class="resultTitle">
+                                    <h3 class="booktitle">
+                                        <a href="$seed.url" class="results">$seed.title</a>
+                                    </h3>
+                                    $:seed_meta_line(seed)
+                                </div>
+                            </div>
+                            <span class="searchResultItemCTA">
+                                $:remove_item_link()
+                            </span>
+                        </div>
+                        $if seed.notes:
+                            <hr>
+                            $:sanitize(format(seed.notes))
+                    </li>
+            </ul>
+
+            $if list.type['key'] == '/type/series':
+                $ compendiums = (seed for seed in seeds if seed.compendium);
+                $if compendiums:
+                    <h2>$_('Compendiums')</h2>
+                    <ul class="list-books">
+                        $for seed in compendiums:
+                            $ doc = solr_works.get(seed.key) or seed.document
+                            $:macros.SearchResultsWork(doc, attrs=seed_attrs(seed), availability=availabilities.get(seed.key), decorations=remove_item_link(), extra=seed_meta_line(seed) if list.list_type != 'series' else None, include_dropper=use_my_books_droppers, footer=seed.notes and sanitize(format(seed.notes)), series=list if list.list_type == 'series' else None)
+                    </ul>
+        </div>
+
+        <div class="flex-contentOneThird" style="margin-bottom:0;">
+
+            $:render_template("type/list/exports", list)
+            $if list.solr_doc:
+                $def render_subjects(label, subjects):
+                    $if subjects:
+                        <div class="section">
+                            <h3 class="collapse black uppercase">$label</h3>
+                            <div class="sansserif">
+                            $for subject in subjects:
+                                <a href="$subject.url">$subject.title</a>$cond(not loop.last, ",", "")
                             </div>
                         </div>
-                        <span class="searchResultItemCTA">
-                            $:remove_item_link()
-                        </span>
-                    </div>
-                    $if seed.notes:
-                        <hr>
-                        $:sanitize(format(seed.notes))
-                </li>
-        </ul>
+
+                $ subjects = list.get_subjects()
+
+                $:render_subjects(_("Subjects"), subjects.subject)
+                $:render_subjects(_("People"), subjects.person)
+                $:render_subjects(_("Places"), subjects.place)
+                $:render_subjects(_("Times"), subjects.time)
+        </div>
     </div>
-
-    <div class="contentOnethird" style="margin-bottom:0;">
-
-        $:render_template("type/list/exports", list)
-
-        $# This is making lists slow, and often the solr request times out,
-        $# so nothing is even rendered. Remove for now, investigate whether
-        $# we want to keep or improve later.
-        $if False:
-            <h2 class="collapse">$_('List Metadata')</h2>
-            <div class="smaller lightgreen sansserif">$_('Derived from seed metadata')</div>
-            <br/>
-
-            $def render_subjects(label, subjects):
-                $if subjects:
-                    <div class="section">
-                        <h3 class="collapse black uppercase">$label</h3>
-                        <div class="sansserif">
-                        $for subject in subjects:
-                            <a href="$subject.url">$subject.title</a>$cond(not loop.last, ",", "")
-                        </div>
-                    </div>
-
-            $ subjects = list.get_subjects()
-
-            $:render_subjects(_("Subjects"), subjects.subjects)
-            $:render_subjects(_("People"), subjects.people)
-            $:render_subjects(_("Places"), subjects.places)
-            $:render_subjects(_("Times"), subjects.times)
-    </div>
-
     <div class="clearfix"></div>
 
     $:macros.Pager(page+1, len(list.seeds), page_size)

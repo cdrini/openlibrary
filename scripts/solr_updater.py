@@ -18,6 +18,8 @@ import urllib
 from typing import Union
 from collections.abc import Iterator
 
+import requests
+
 import _init_path  # Imported for its side effect of setting PYTHONPATH
 
 import aiofiles
@@ -68,8 +70,8 @@ class InfobaseLog:
             url = f"{self.base_url}/{self.offset}?limit=100"
             logger.debug("Reading log from %s", url)
             try:
-                jsontext = urllib.request.urlopen(url).read()
-            except urllib.error.URLError as e:
+                d = requests.get(url).json()
+            except requests.RequestException as e:
                 logger.error("Failed to open URL %s", url, exc_info=True)
                 if e.args and e.args[0].args == (111, 'Connection refused'):
                     logger.error(
@@ -78,12 +80,9 @@ class InfobaseLog:
                     )
                     sys.exit(1)
                 raise
+            except ValueError as e:
+                logger.error("Bad JSON: %s", e)
 
-            try:
-                d = json.loads(jsontext)
-            except:
-                logger.error("Bad JSON: %s", jsontext)
-                raise
             data = d['data']
             # no more data is available
             if not data:
@@ -222,7 +221,7 @@ async def update_keys(keys):
     keys = [
         k
         for k in keys
-        if k.count("/") == 2 and k.split("/")[1] in ("books", "authors", "works")
+        if (k.count("/") == 2 and k.split("/")[1] in ("books", "authors", "works", "lists", "series")) or re.match(r"^/people/[^/]+/lists/OL", k)
     ]
 
     count = 0
@@ -291,10 +290,12 @@ async def main(
 
     offset = read_state_file(state_file, initial_state)
 
+    logger.info("BEGIN initializing log from %s", offset)
     logfile = InfobaseLog(
         config.get('infobase_server'), exclude=exclude_edits_containing
     )
     logfile.seek(offset)
+    logger.info("END initializing log from %s", offset)
 
     while True:
         records = logfile.read_records()

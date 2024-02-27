@@ -14,12 +14,14 @@ from infogami.utils import stats
 from openlibrary.core import helpers as h
 from openlibrary.core import cache
 from openlibrary.core.models import Image, Subject, Thing, ThingKey
-from openlibrary.i18n import gettext as _
+from openlibrary.i18n import gettext as _, ungettext
 from openlibrary.plugins.upstream.models import Author, Changeset, Edition, User, Work
 
 from openlibrary.plugins.worksearch.search import get_solr
 from openlibrary.plugins.worksearch.subjects import get_subject
 import contextlib
+
+from openlibrary.solr.solr_types import SolrDocument
 
 logger = logging.getLogger("openlibrary.lists.model")
 
@@ -42,7 +44,10 @@ class AnnotatedSeedDict(TypedDict):
     """
 
     thing: ThingReferenceDict
-    notes: str
+    notes: str | None
+    primary: bool | None
+    compendium: bool | None
+    position: str | None
 
 
 class AnnotatedSeed(TypedDict):
@@ -51,7 +56,10 @@ class AnnotatedSeed(TypedDict):
     """
 
     thing: Thing
-    notes: str
+    notes: str | None
+    primary: bool | None
+    compendium: bool | None
+    position: str | None
 
 
 class AnnotatedSeedThing(Thing):
@@ -98,24 +106,6 @@ class List(Thing):
             return cast(User, self._site.get(key))
         else:
             return None
-
-    def format_book_label(self, seed_key: ThingKey) -> str:
-        """
-        Returns a string that can be used to label a book in a list.
-        """
-
-        index = self.index_of_seed(seed_key) + 1
-        match self.seed_label or 'book':
-            case 'book':
-                return _("Book %s", index)
-            case 'volume':
-                return _("Volume %s", index)
-            case 'issue':
-                return _("Issue %s", index)
-            case 'none':
-                return ''
-            case _:
-                raise ValueError(f"Invalid seed label: {self.seed_label!r}")
 
     def get_cover(self):
         """Returns a cover object."""
@@ -276,8 +266,9 @@ class List(Thing):
         terms = [seed.get_solr_query_term() for seed in self.get_seeds()]
         return " OR ".join(t for t in terms if t)
 
-    def _get_all_subjects(self):
-        solr = get_solr()
+    @cached_property
+    def solr_doc(self) -> SolrDocument | None:
+        return get_solr().get(self.key)
         q = self._get_solr_query_for_subjects()
 
         # Solr has a maxBooleanClauses constraint there too many seeds, the
@@ -321,23 +312,20 @@ class List(Thing):
 
         return sorted(process_all(), reverse=True, key=lambda s: s["count"])
 
-    def get_subjects(self, limit=20):
-        def get_subject_type(s):
-            if s.url.startswith("/subjects/place:"):
-                return "places"
-            elif s.url.startswith("/subjects/person:"):
-                return "people"
-            elif s.url.startswith("/subjects/time:"):
-                return "times"
-            else:
-                return "subjects"
+    def get_subjects(self):
+        if not self.solr_doc:
+            raise ValueError("No solr doc found for list %s" % self.key)
 
-        d = web.storage(subjects=[], places=[], people=[], times=[])
+        d = web.storage(subject=[], place=[], person=[], time=[])
 
-        for s in self._get_all_subjects():
-            kind = get_subject_type(s)
-            if len(d[kind]) < limit:
-                d[kind].append(s)
+        for key in d:
+            if key in self.solr_doc:
+                d[key] = [
+                    web.storage(
+                        {"title": s, "name": s, "key": f'{key}:{skey}', "url": f"/subjects/{key}:{skey}"}
+                    )
+                    for (s, skey) in zip (self.solr_doc[key], self.solr_doc[f"{key}_key"])
+                ]
         return d
 
     def get_seeds(self, sort=False, resolve_redirects=False) -> list['Seed']:
@@ -376,6 +364,63 @@ class List(Thing):
         cover_id = self._get_default_cover_id()
         return Image(self._site, 'b', cover_id)
 
+    def book_count_string(self) -> str:
+        count = self.seed_count
+        return ungettext("%(count)d item", "%(count)d items", count, count=count)
+
+
+class Series(List):
+    def primary_book_count(self) -> int:
+        return sum(1 for seed in self.get_seeds() if seed.primary)
+
+    def book_count_string(self) -> str:
+        count = self.primary_book_count()
+        match self.seed_label or 'book':
+            case 'book':
+                return ungettext("%(count)d book", "%(count)d books", count, count=count)
+            case 'volume':
+                return ungettext("%(count)d volume", "%(count)d volumes", count, count=count)
+            case 'issue':
+                return ungettext("%(count)d issue", "%(count)d issues", count, count=count)
+            case 'none':
+                return ''
+            case _:
+                raise ValueError(f"Invalid seed label: {self.seed_label!r}")
+        return 
+
+    def format_book_label(self, seed_key: ThingKey) -> str:
+        """
+        Returns a string that can be used to label a book in a list.
+        """
+
+        index = self.index_of_seed(seed_key)
+        seed = self.get_seeds()[index]
+        if seed.compendium and seed.position:
+            match self.seed_label or 'book':
+                case 'book':
+                    return _("Books %s", seed.position)
+                case 'volume':
+                    return _("Volumes %s", seed.position)
+                case 'issue':
+                    return _("Issues %s", seed.position)
+                case 'none':
+                    return ''
+                case _:
+                    raise ValueError(f"Invalid seed label: {self.seed_label!r}")
+        else:
+            match self.seed_label or 'book':
+                case 'book':
+                    return _("Book %s", index + 1)
+                case 'volume':
+                    return _("Volume %s", index + 1)
+                case 'issue':
+                    return _("Issue %s", index + 1)
+                case 'none':
+                    return ''
+                case _:
+                    raise ValueError(f"Invalid seed label: {self.seed_label!r}")
+
+
 
 class Seed:
     """Seed of a list.
@@ -394,6 +439,9 @@ class Seed:
     value: Thing | SeedSubjectString
 
     notes: str | None = None
+    primary: bool = True
+    compendium: bool = False
+    position: str | None = None
 
     def __init__(
         self,
@@ -411,7 +459,10 @@ class Seed:
             # AnnotatedSeed
             self.key = value['thing'].key
             self.value = value['thing']
-            self.notes = value['notes']
+            self.notes = value.get('notes')
+            self.primary = value.get('primary', True)
+            self.compendium = value.get('compendium', False)
+            self.position = value.get('position')
         else:
             self.key = value.key
             self.value = value
@@ -443,7 +494,10 @@ class Seed:
                         'thing': Thing(
                             list._site, annotated_seed['thing']['key'], None
                         ),
-                        'notes': annotated_seed['notes'],
+                        'notes': annotated_seed.get('notes'),
+                        'primary': annotated_seed.get('primary', True),
+                        'compendium': annotated_seed.get('compendium', False),
+                        'position': annotated_seed.get('position'),
                     },
                 )
             elif 'key' in seed_json:
@@ -453,6 +507,9 @@ class Seed:
                     {
                         'thing': Thing(list._site, thing_ref['key'], None),
                         'notes': '',
+                        'primary': True,
+                        'compendium': False,
+                        'position': None,
                     },
                 )
         return Seed(list, seed_json)
@@ -463,26 +520,36 @@ class Seed:
         """
         if isinstance(self.value, str):
             return self.value
+        annotated_doc: AnnotatedSeedDict = { 'thing': self.value }
+
         if self.notes:
-            return Thing(
-                self._list._site,
-                None,
-                {
-                    'thing': self.value,
-                    'notes': self.notes,
-                },
-            )
+            annotated_doc['notes'] = self.notes
+    
+        if isinstance(self._list, Series):
+            annotated_doc['primary'] = self.primary
+            annotated_doc['compendium'] = self.compendium
+            annotated_doc['position'] = self.position
+        
+        if annotated_doc != { 'thing': self.value }: 
+            return Thing(self._list._site, None, annotated_doc)
         else:
             return self.value
 
     def to_json(self) -> SeedSubjectString | ThingReferenceDict | AnnotatedSeedDict:
         if isinstance(self.value, str):
             return self.value
-        elif self.notes:
-            return {
-                'thing': {'key': self.key},
-                'notes': self.notes,
-            }
+        
+        annotated_seed: AnnotatedSeedDict = {'thing': {'key': self.key}}
+
+        if self.notes:
+            annotated_seed['notes'] = self.notes
+        if isinstance(self._list, Series):
+            annotated_seed['primary'] = self.primary
+            annotated_seed['compendium'] = self.compendium
+            annotated_seed['position'] = self.position
+        
+        if annotated_seed != {'thing': {'key': self.key}}:
+            return annotated_seed
         else:
             return {'key': self.key}
 
@@ -613,3 +680,5 @@ class ListChangeset(Changeset):
 def register_models():
     client.register_thing_class('/type/list', List)
     client.register_changeset_class('lists', ListChangeset)
+
+    client.register_thing_class('/type/series', Series)
