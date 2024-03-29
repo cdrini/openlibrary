@@ -58,35 +58,109 @@ class FilterState {
     }
 }
 
+class TimeNode {
+    /**
+     * @param {object} args
+     * @param {string} args.name
+     * @param {string} args.short
+     * @param {'root' | null} args.position
+     * @param {number} args.low
+     * @param {number} args.high
+     */
+    constructor({name, short, position=null, low, high}) {
+        this.name = name;
+        this.short = short;
+        this.position = position;
+        this.offset = 0;
+        this.requests = {};
+        this.low = low;
+        this.high = high;
+        this._children = [];
+        this._childrenLoaded = false;
+    }
+
+    get query() {
+        return `[${this.low} TO ${this.high - 1}]`;
+    }
+
+    get children() {
+        if (this._childrenLoaded) {
+            return this._children;
+        }
+
+        if (this.high - this.low > 1) {
+            const interval = 10 ** (Math.ceil(Math.log10(this.high - this.low)) - 1);
+            for (let i = this.low; i < this.high; i += interval) {
+                this._children.push(new TimeNode({
+                    name: interval > 1 ? `${i}s` : i,
+                    short: interval > 1 ? `${i}s` : i,
+                    position: 'root',
+                    low: i,
+                    high: i + interval
+                }));
+            }
+        }
+        this._childrenLoaded = true;
+        return this._children.length ? this._children : undefined;
+    }
+}
+
 /** @type {import('./LibraryExplorer/utils').ClassificationTree[]} */
 const CLASSIFICATIONS = [
     {
         name: 'DDC',
         longName: 'Dewey Decimal Classification',
         field: 'ddc',
+        sort_field: 'ddc_sort',
         fieldTransform: ddc => ddc,
         toQueryFormat: ddc => ddc,
         chooseBest: ddcs => maxBy(ddcs, ddc => ddc.replace(/[\d.]/g, '') ? ddc.length : 100 + ddc.length),
+        renderAll: ddcs => ddcs.join('\n'),
+        renderAllTransformed: ddcs => ddcs.map(CLASSIFICATIONS[0].fieldTransform).join('\n'),
+        renderFirst: ddcs => ddcs[0],
         root: recurForEach({ children: DDC, query: '*' }, n => {
             n.position = 'root';
             n.offset = 0;
             n.requests = {};
-        })
+        }),
     },
     {
         name: 'LCC',
         longName: 'Library of Congress Classification',
         field: 'lcc',
+        sort_field: 'lcc_sort',
         fieldTransform: sortable_lcc_to_short_lcc,
         toQueryFormat: lcc => {
             const normalized = short_lcc_to_sortable_lcc(lcc);
             return normalized ? normalized.split(' ')[0] : lcc;
         },
         chooseBest: lccs => maxBy(lccs, lcc => lcc.length),
+        renderAll: lccs => lccs.join('\n'),
+        renderAllTransformed: lccs => lccs.map(CLASSIFICATIONS[1].fieldTransform).join('\n'),
+        renderFirst: lccs => lccs[0],
         root: recurForEach({ children: LCC, query: '*' }, n => {
             n.position = 'root';
             n.offset = 0;
             n.requests = {};
+        }),
+    },
+    {
+        name: 'Year',
+        longName: 'First Publish Year',
+        field: 'first_publish_year',
+        sort_field: 'first_publish_year',
+        fieldTransform: year => year,
+        toQueryFormat: year => year,
+        chooseBest: year => year,
+        renderAll: year => year,
+        renderAllTransformed: year => year,
+        renderFirst: year => year,
+        root: new TimeNode({
+            name: 'Year',
+            short: 'Year',
+            position: 'root',
+            low: 1000,
+            high: new Date().getFullYear() + 1,
         })
     }
 ];

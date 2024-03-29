@@ -71,11 +71,7 @@
       <template v-slot:cover-label="{ book }">
         <div
           v-if="book[classification.field] && labels.includes('classification')"
-          :title="
-            book[classification.field]
-              .map(classification.fieldTransform)
-              .join('\n')
-          "
+          :title="classification.renderAllTransformed(book[classification.field])"
           >{{
             classification.fieldTransform(classification.chooseBest(book[classification.field]))
           }}</div>

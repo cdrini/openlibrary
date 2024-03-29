@@ -178,10 +178,10 @@ export default {
 
             // Find the offset of the predecessor of the requested item in its shelf
             const predecessor = decrementStringSolr(this.jumpToData.classification, false, this.classification.field === 'ddc');
-            const shelf_query = `${this.classification.field}_sort:${this.jumpToData.shelf.query} ${this.filter}`;
+            const shelf_query = `${this.classification.sort_field}:${this.jumpToData.shelf.query} ${this.filter}`;
             /** @type {number} */
             const offset = await fetch(`${CONFIGS.OL_BASE_SEARCH}/search.json?${new URLSearchParams({
-                q: `${shelf_query} AND ${this.classification.field}_sort:[* TO ${predecessor}]`,
+                q: `${shelf_query} AND ${this.classification.sort_field}:[* TO ${predecessor}]`,
                 limit: 0,
             })}`).then(r => r.json()).then(r => r.numFound);
             const olCarousel = this.$el.querySelector(`.ol-carousel[data-short="${this.jumpToData.shelf.short}"]`);

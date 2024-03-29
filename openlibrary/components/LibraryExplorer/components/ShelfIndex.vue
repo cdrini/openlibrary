@@ -7,7 +7,7 @@
         @click.prevent="index = 'root'"
         >
           All {{ node.short }}
-          <span class="shelf-label--subclasses--count">{{ node.count }}</span>
+          <span class="shelf-label--subclasses--count" v-if="node.count != undefined">{{ node.count }}</span>
         </a
       >
     </li>
@@ -18,7 +18,7 @@
         @click.prevent="index = i"
         >
           {{ child.name }}
-          <span class="shelf-label--subclasses--count">{{ child.count }}</span>
+          <span class="shelf-label--subclasses--count" v-if="child.count != undefined">{{ child.count }}</span>
         </a
       >
     </li>

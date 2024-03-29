@@ -3,8 +3,8 @@
     <OLCarousel :query="`${classification.field}:${activeSection.query} ${filter}`" :offset="activeSection.position">
       <template v-slot:cover-label="{book}">
         <span
-          :title="book[classification.field].join('\n')"
-        >{{book[classification.field][0]}}</span>
+          :title="classification.renderAll(book[classification.field])"
+        >{{classification.renderFirst(book[classification.field])}}</span>
       </template>
     </OLCarousel>
 
