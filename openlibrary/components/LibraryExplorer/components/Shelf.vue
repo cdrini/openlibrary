@@ -77,6 +77,7 @@
           }}</div>
         <div v-if="labels.includes('first_publish_year')">{{book.first_publish_year}}</div>
         <div v-if="labels.includes('edition_count')">{{book.edition_count}} editions</div>
+        <div v-if="labels.includes('ratings_sortable')">⭐ {{book.ratings_sortable ? book.ratings_sortable.toFixed(2) : 'No ratings'}}</div>
       </template>
     </OLCarousel>
 

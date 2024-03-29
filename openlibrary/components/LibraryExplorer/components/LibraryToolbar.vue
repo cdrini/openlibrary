@@ -183,6 +183,10 @@
                   <input type="checkbox" v-model="settingsState.labels" value="edition_count">
                   Number of Editions
                 </label>
+                <label>
+                  <input type="checkbox" v-model="settingsState.labels" value="ratings_sortable">
+                  Rating
+                </label>
               </div>
             </div>
           </main>
@@ -270,6 +274,7 @@ export default {
                 old: 'first_publish_year',
                 ddc_sort: 'classification',
                 lcc_sort: 'classification',
+                rating: 'ratings_sortable',
             }[newVal];
             if (desiredLabel && !this.settingsState.labels.includes(desiredLabel)) {
                 this.settingsState.labels.push(desiredLabel);
