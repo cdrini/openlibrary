@@ -137,7 +137,7 @@
                     <input type="radio" v-model="sortState.order" value="readinglog">Reading Log
                   </label>
                   <label title="I.e. Classification order. Note some books maybe missing when sorting by shelf order–we're working on it.">
-                    <input type="radio" v-model="sortState.order" :value="`${settingsState.selectedClassification.field}_sort asc`" >Shelf Order
+                    <input type="radio" v-model="sortState.order" :value="`${settingsState.selectedClassification.field}_sort`" >Shelf Order
                   </label>
                   <label>
                     <input type="radio" v-model="sortState.order" :value="randomWithSeed">Random
@@ -218,9 +218,7 @@ export default {
     },
 
     props: {
-        filterState: Object,
-        settingsState: Object,
-        sortState: Object,
+        libraryState: Object,
     },
 
     data() {
@@ -265,7 +263,7 @@ export default {
             this.filterState.languages = newVal;
         },
 
-        ['sortState.order'](newVal) {
+        ['libraryState.sortState.order'](newVal) {
             const desiredLabel = {
                 editions: 'edition_count',
                 new: 'first_publish_year',
@@ -276,10 +274,26 @@ export default {
             if (desiredLabel && !this.settingsState.labels.includes(desiredLabel)) {
                 this.settingsState.labels.push(desiredLabel);
             }
+        },
+
+        libraryState: {
+            deep: true,
+            handler() {
+                this.libraryState.toUrl();
+            }
         }
     },
 
     computed: {
+        filterState() {
+            return this.libraryState.filterState;
+        },
+        sortState() {
+            return this.libraryState.sortState;
+        },
+        settingsState() {
+            return this.libraryState.settings;
+        },
         twitterUrl() {
             return `https://twitter.com/intent/tweet?${new URLSearchParams(this.tweet)}`;
         },

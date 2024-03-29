@@ -1,16 +1,16 @@
 <template>
   <div id="app">
     <BookRoom
-      :classification="settingsState.selectedClassification"
+      :classification="libraryState.settings.selectedClassification"
       :filter="computedFilter"
-      :sort="sortState.order"
+      :sort="libraryState.sortState.order"
       :class="bookRoomClass"
       :features="bookRoomFeatures"
-      :appSettings="settingsState"
-      :jumpTo="jumpTo"
+      :appSettings="libraryState.settings"
+      :jumpTo="libraryState.jumpTo"
     />
 
-    <LibraryToolbar :filterState="filterState" :settingsState="settingsState" :sortState="sortState" />
+    <LibraryToolbar :libraryState="libraryState" />
   </div>
 </template>
 
@@ -58,124 +58,166 @@ class FilterState {
     }
 }
 
+/** @type {import('./LibraryExplorer/utils').ClassificationTree[]} */
+const CLASSIFICATIONS = [
+    {
+        name: 'DDC',
+        longName: 'Dewey Decimal Classification',
+        field: 'ddc',
+        fieldTransform: ddc => ddc,
+        toQueryFormat: ddc => ddc,
+        chooseBest: ddcs => maxBy(ddcs, ddc => ddc.replace(/[\d.]/g, '') ? ddc.length : 100 + ddc.length),
+        root: recurForEach({ children: DDC, query: '*' }, n => {
+            n.position = 'root';
+            n.offset = 0;
+            n.requests = {};
+        })
+    },
+    {
+        name: 'LCC',
+        longName: 'Library of Congress Classification',
+        field: 'lcc',
+        fieldTransform: sortable_lcc_to_short_lcc,
+        toQueryFormat: lcc => {
+            const normalized = short_lcc_to_sortable_lcc(lcc);
+            return normalized ? normalized.split(' ')[0] : lcc;
+        },
+        chooseBest: lccs => maxBy(lccs, lcc => lcc.length),
+        root: recurForEach({ children: LCC, query: '*' }, n => {
+            n.position = 'root';
+            n.offset = 0;
+            n.requests = {};
+        })
+    }
+];
+
+class LibraryState {
+    constructor() {
+        this.filterState = new FilterState();
+        this.sortState = {
+            order: `random_${new Date().toISOString().split(':')[0]}`,
+        };
+        this.jumpTo = null;
+        this.settings = {
+            selectedClassification: CLASSIFICATIONS[0],
+            classifications: CLASSIFICATIONS,
+            labels: ['classification'],
+            styles: {
+                book: {
+                    options: [
+                        'default',
+                        '3d',
+                        'spines',
+                        '3d-spines',
+                        '3d-flat'
+                    ],
+                    selected: 'default'
+                },
+
+                cover: {
+                    options: [
+                        'image',
+                        'text'
+                    ],
+                    selected: 'image'
+                },
+
+                shelfLabel: {
+                    debugModeOnly: true,
+                    options: ['slider', 'expander'],
+                    selected: 'slider'
+                },
+
+                aesthetic: {
+                    debugModeOnly: true,
+                    options: ['mockup', 'wip'],
+                    selected: 'wip'
+                },
+
+                scrollbar: {
+                    options: ['default', 'thin', 'hidden'],
+                    selected: 'thin',
+                },
+            },
+        };
+    }
+
+    findClassification(field) {
+        return this.settings.classifications.find(c => c.field === field);
+    }
+
+    static fromUrl(location=window.location) {
+        const urlParams = new URLSearchParams(location.search);
+        const state = new LibraryState();
+        state.sortState.order = urlParams.get('sort') || state.sortState.order;
+
+        // /explore/ddc (i.e. the second part of th path) should load the DDC classification, etc.
+        const classificationName = location.pathname.split('/')[2];
+        if (classificationName) {
+            state.settings.selectedClassification = state.findClassification(classificationName) || state.settings.selectedClassification;
+        }
+
+        if (urlParams.has('jumpTo')) {
+            const [classificationName, classificationString] = urlParams.get('jumpTo').split(':');
+            state.settings.selectedClassification = state.findClassification(classificationName);
+            state.jumpTo = state.settings.selectedClassification.toQueryFormat(classificationString);
+        }
+        return state;
+    }
+
+    toUrl() {
+        // Update the path to be /explore/{classification.field}
+        let path = `/explore/${this.settings.selectedClassification.field}`;
+        if (this.settings.selectedClassification.field === 'ddc') {
+            path = '/explore';
+        }
+        const url = new URL(window.location);
+        url.pathname = path;
+
+        const params = {
+            sort: this.sortState.order,
+            jumpTo: this.jumpTo ? `${this.settings.selectedClassification.field}:${this.jumpTo}` : undefined
+        };
+        // Don't add to url if the value is default
+        if (params.sort.startsWith('random_')) {
+            delete params.sort;
+        }
+        if (!params.jumpTo) {
+            delete params.jumpTo;
+        }
+        url.search = new URLSearchParams(params).toString();
+
+        // Update the url without causing a refresh and without adding a new entry to the history
+        window.history.replaceState({}, '', url.toString());
+    }
+}
+
 export default {
     components: {
         BookRoom,
         LibraryToolbar,
     },
     data() {
-        /** @type {import('./LibraryExplorer/utils').ClassificationTree[]} */
-        const classifications = [
-            {
-                name: 'DDC',
-                longName: 'Dewey Decimal Classification',
-                field: 'ddc',
-                fieldTransform: ddc => ddc,
-                toQueryFormat: ddc => ddc,
-                chooseBest: ddcs => maxBy(ddcs, ddc => ddc.replace(/[\d.]/g, '') ? ddc.length : 100 + ddc.length),
-                root: recurForEach({ children: DDC, query: '*' }, n => {
-                    n.position = 'root';
-                    n.offset = 0;
-                    n.requests = {};
-                })
-            },
-            {
-                name: 'LCC',
-                longName: 'Library of Congress Classification',
-                field: 'lcc',
-                fieldTransform: sortable_lcc_to_short_lcc,
-                toQueryFormat: lcc => {
-                    const normalized = short_lcc_to_sortable_lcc(lcc);
-                    return normalized ? normalized.split(' ')[0] : lcc;
-                },
-                chooseBest: lccs => maxBy(lccs, lcc => lcc.length),
-                root: recurForEach({ children: LCC, query: '*' }, n => {
-                    n.position = 'root';
-                    n.offset = 0;
-                    n.requests = {};
-                })
-            }
-        ];
-
-        const urlParams = new URLSearchParams(location.search);
-        let selectedClassification = classifications[0];
-        let jumpTo = null;
-        if (urlParams.has('jumpTo')) {
-            const [classificationName, classificationString] = urlParams.get('jumpTo').split(':');
-            selectedClassification = classifications.find(c => c.field === classificationName);
-            jumpTo = selectedClassification.toQueryFormat(classificationString);
-        }
         return {
-            filterState: new FilterState(),
-
-            sortState: {
-                order: jumpTo ? `${selectedClassification.field}_sort asc` : `random_${new Date().toISOString().split(':')[0]}`,
-            },
-
-            jumpTo,
-
-            settingsState: {
-                selectedClassification,
-                classifications,
-
-                labels: ['classification'],
-
-                styles: {
-                    book: {
-                        options: [
-                            'default',
-                            '3d',
-                            'spines',
-                            '3d-spines',
-                            '3d-flat'
-                        ],
-                        selected: 'default'
-                    },
-
-                    cover: {
-                        options: [
-                            'image',
-                            'text'
-                        ],
-                        selected: 'image'
-                    },
-
-                    shelfLabel: {
-                        debugModeOnly: true,
-                        options: ['slider', 'expander'],
-                        selected: 'slider'
-                    },
-
-                    aesthetic: {
-                        debugModeOnly: true,
-                        options: ['mockup', 'wip'],
-                        selected: 'wip'
-                    },
-
-                    scrollbar: {
-                        options: ['default', 'thin', 'hidden'],
-                        selected: 'thin',
-                    },
-                },
-            },
+            libraryState: LibraryState.fromUrl(),
         };
     },
 
     computed: {
         computedFilter() {
-            return this.filterState.solrQuery();
+            return this.libraryState.filterState.solrQuery();
         },
 
         bookRoomFeatures() {
             return {
-                book3d: this.settingsState.styles.book.selected.startsWith('3d'),
-                cover: this.settingsState.styles.cover.selected,
-                shelfLabel: this.settingsState.styles.shelfLabel.selected
+                book3d: this.libraryState.settings.styles.book.selected.startsWith('3d'),
+                cover: this.libraryState.settings.styles.cover.selected,
+                shelfLabel: this.libraryState.settings.styles.shelfLabel.selected
             };
         },
 
         bookRoomClass() {
-            return Object.entries(this.settingsState.styles)
+            return Object.entries(this.libraryState.settings.styles)
                 .map(([key, val]) => `style--${key}--${val.selected}`)
                 .join(' ');
         }
