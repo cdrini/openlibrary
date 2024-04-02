@@ -16,7 +16,7 @@
       <div
         class="title"
         :style="(finalThickness < 30) && `transform: translateX(${finalThickness/2}px) rotateZ(90deg);`"
-      >{{book.title}}</div>
+      >{{book.editions.docs[0]?.title ?? book.title}}</div>
     </template>
   </CSSBox>
 </template>

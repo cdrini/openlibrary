@@ -205,7 +205,7 @@ export default {
                 offset,
                 limit: this.limit,
                 sort: this.sort,
-                fields: 'key,title,author_name,cover_i,ddc,lcc,lending_edition_s,first_publish_year,edition_count,number_of_pages_median,ratings_sortable',
+                fields: 'key,title,editions,author_name,cover_i,ddc,lcc,first_publish_year,edition_count,number_of_pages_median,ratings_sortable',
             });
 
             const url = `${CONFIGS.OL_BASE_SEARCH}/search.json?${params.toString()}`;

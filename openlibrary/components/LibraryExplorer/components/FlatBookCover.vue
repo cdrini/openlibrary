@@ -4,12 +4,12 @@
     class="cover"
     loading="lazy"
     @load="$emit('load', $event)"
-    :alt="book.title"
+    :alt="book.editions.docs[0]?.title ?? book.title"
     :src="coverMultiresUrl.medium"
     :srcset="`${coverMultiresUrl.large} 2x`"
   >
   <div v-else class="cover" :style="`background: linear-gradient(to right,  hsl(${hashHue}, 20%, 16%),  hsl(${hashHue}, 20%, 10%) 6px, hsl(${hashHue}, 20%, 16%) 10px)`">
-    <div class="title">{{book.title}}</div>
+    <div class="title">{{book.editions.docs[0]?.title ?? book.title}}</div>
     <hr :style="`border-color: hsl(${hashHue}, 80%, 60%)`">
     <div class="author" :style="`color: hsl(${hashHue + 30}, 25%, 70%)`">{{byline}}</div>
   </div>
@@ -35,21 +35,16 @@ export default {
         },
 
         coverMultiresUrl() {
-            const { cover_i, lending_edition_s } = this.book;
-            const fullUrl = lending_edition_s ? this.olCoverUrl(lending_edition_s, 'olid') :
-                cover_i && cover_i !== -1 ? this.olCoverUrl(cover_i) :
-                    null;
+            const cover_i = this.book.editions.docs[0]?.cover_i;
+            if (!cover_i || cover_i === -1) return undefined;
 
-            if (fullUrl) {
-                return {
-                    small: fullUrl.replace('.jpg', '-S.jpg'),
-                    medium: fullUrl.replace('.jpg', '-M.jpg'),
-                    large: fullUrl.replace('.jpg', '-L.jpg'),
-                    full: fullUrl,
-                };
-            } else {
-                return undefined;
-            }
+            const fullUrl = this.olCoverUrl(cover_i);
+            return {
+                small: fullUrl.replace('.jpg', '-S.jpg'),
+                medium: fullUrl.replace('.jpg', '-M.jpg'),
+                large: fullUrl.replace('.jpg', '-L.jpg'),
+                full: fullUrl,
+            };
         },
 
         hashHue() {
@@ -59,11 +54,10 @@ export default {
 
     methods: {
         /**
-         * @param {String} id
-         * @param {'id' | 'olid'} idType
+         * @param {number} id
          */
-        olCoverUrl(id, idType='id') {
-            return `${CONFIGS.OL_BASE_COVERS}/b/${idType}/${id}.jpg`;
+        olCoverUrl(id) {
+            return `${CONFIGS.OL_BASE_COVERS}/b/id/${id}.jpg`;
         }
     }
 };

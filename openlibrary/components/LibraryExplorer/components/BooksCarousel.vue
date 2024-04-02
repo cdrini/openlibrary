@@ -4,7 +4,7 @@
       <slot name="book-end-start"/>
     </div>
 
-    <a class="book" v-for="book in books" :key="book.key" :href="`${OL_BASE_BOOKS}${book.key}`" target="_blank" :title="book.title">
+    <a class="book" v-for="book in books" :key="book.key" :href="`${OL_BASE_BOOKS}${book.editions.docs[0] ? book.key + '?edition=key:' + book.editions.docs[0].key : book.key}`" target="_blank" :title="book.editions.docs[0]?.title ?? book.title">
       <slot name="cover" v-bind:book="book">
         <FlatBookCover :book="book"/>
       </slot>
