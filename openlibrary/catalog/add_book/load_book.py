@@ -1,3 +1,5 @@
+from typing import TypedDict, Optional
+
 import web
 from openlibrary.catalog.utils import flip_name, author_dates_match, key_int
 
@@ -83,33 +85,38 @@ def find_author(name):
     :rtype: list
     :return: A list of OL author representations than match name
     """
-
-    def walk_redirects(obj, seen):
-        seen.add(obj['key'])
-        while obj['type']['key'] == '/type/redirect':
-            assert obj['location'] != obj['key']
-            obj = web.ctx.site.get(obj['location'])
-            seen.add(obj['key'])
-        return obj
-
-    q = {'type': '/type/author', 'name': name}  # FIXME should have no limit
-    reply = list(web.ctx.site.things(q))
-    authors = [web.ctx.site.get(k) for k in reply]
-    if any(a.type.key != '/type/author' for a in authors):
-        seen = set()
-        authors = [walk_redirects(a, seen) for a in authors if a['key'] not in seen]
-    return authors
+    return [
+        web.ctx.site.get(k)
+        for k in web.ctx.site.things({'type': '/type/author', 'name': name})
+    ]
 
 
-def find_entity(author):
+class AuthorMatchData(TypedDict):
+    name: str
+    # Aliases for one another
+    asin: Optional[str]
+    amazon: Optional[str]
+
+
+def find_entity(author: AuthorMatchData):
     """
-    Looks for an existing Author record in OL by name
-    and returns it if found.
+    Finds closely matching author records from the provided data
 
     :param dict author: Author import dict {"name": "Some One"}
     :rtype: dict|None
     :return: Existing Author record, if one is found
     """
+    if 'asin' in author or 'amazon' in author:
+        matching_authors = [
+            web.ctx.site.get(k)
+            for k in web.ctx.site.things({
+                'type': '/type/author',
+                'remote_ids.amazon': author.get('asin') or author.get('amazon'),
+            })
+        ]
+        if len(matching_authors) == 1:
+            return matching_authors[0]
+        return None
     name = author['name']
     things = find_author(name)
     et = author.get('entity_type')
