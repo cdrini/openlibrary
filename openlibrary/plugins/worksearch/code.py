@@ -170,6 +170,7 @@ def run_solr_query(  # noqa: PLR0912
     offset=None,
     fields: str | list[str] | None = None,
     facet: bool | Iterable[str] = True,
+    highlight: bool = False,
     allowed_filter_params: set[str] | None = None,
     extra_params: list[tuple[str, Any]] | None = None,
 ):
@@ -257,7 +258,7 @@ def run_solr_query(  # noqa: PLR0912
                 ('editions.sort', EditionSearchScheme().process_user_sort(ed_sort))
             )
         params.append(('fl', ','.join(solr_fields)))
-        params += scheme.q_to_solr_params(q, solr_fields, params)
+        params += scheme.q_to_solr_params(q, solr_fields, params, highlight=highlight)
 
     if sort:
         params.append(('sort', scheme.process_user_sort(sort)))
@@ -285,6 +286,7 @@ class SearchResponse:
     num_found: int
     solr_select: str
     raw_resp: dict = None
+    highlighting: dict = None
     error: str = None
     time: float = None
     """Seconds to execute the query"""
@@ -321,6 +323,7 @@ class SearchResponse:
                 raw_resp=solr_result,
                 docs=solr_result['response']['docs'],
                 num_found=solr_result['response']['numFound'],
+                highlighting=solr_result.get('highlighting', None),
                 solr_select=solr_select,
                 time=time,
             )
@@ -332,6 +335,7 @@ def do_search(
     page=1,
     rows=100,
     facet=False,
+    highlight=False,
     spellcheck_count=None,
 ):
     """
@@ -361,6 +365,7 @@ def do_search(
         spellcheck_count,
         fields=list(fields),
         facet=facet,
+        highlight=highlight,
     )
 
 
@@ -552,7 +557,7 @@ class search(delegate.page):
         rows = 20
         if param:
             search_response = do_search(
-                param, sort, page, rows=rows, spellcheck_count=3
+                param, sort, page, rows=rows, highlight=True, spellcheck_count=3
             )
         else:
             search_response = SearchResponse(
@@ -865,6 +870,7 @@ def work_search(
     limit: int = 100,
     fields: str = '*',
     facet: bool = True,
+    highlight: bool = False,
     spellcheck_count: int | None = None,
 ) -> dict:
     """
@@ -887,9 +893,13 @@ def work_search(
         offset=offset,
         fields=fields,
         facet=facet,
+        highlight=highlight,
         spellcheck_count=spellcheck_count,
     )
     response = resp.raw_resp['response']
+
+    if resp.highlighting is not None:
+        response['highlighting'] = resp.highlighting
 
     # backward compatibility
     response['num_found'] = response['numFound']
