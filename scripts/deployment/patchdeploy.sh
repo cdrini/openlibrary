@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# usage: ./scripts/deployment/patchdeploy.sh 1234
+# usage: ./scripts/deployment/patchdeploy.sh 1234 5678 9012
 
 # Check if PR number is provided
 if [[ -z "$1" || "$1" == "--help" ]]; then
     echo "This script applies a patch from a GitHub PR to the Open Library servers."
     echo ""
-    echo "Usage: $0 <pr_number>"
+    echo "Usage: $0 <pr_number> [pr_number2] [pr_number3] ..."
     echo ""
     echo "Environment variables:"
     echo "  SERVERS=ol-web0 ol-web1 ol-web2  List of servers to apply the patch to."
@@ -20,11 +20,16 @@ if [[ -z "$1" || "$1" == "--help" ]]; then
     exit 1
 fi
 
-if [[ "$1" == https* ]]; then
-    PATCH_URL="$1"
-else
-    PATCH_URL="https://patch-diff.githubusercontent.com/raw/internetarchive/openlibrary/pull/${1}.diff"
-fi
+# Build array of patch URLs from all arguments
+PATCH_URLS=()
+for arg in "$@"; do
+    if [[ "$arg" == https* ]]; then
+        PATCH_URLS+=("$arg")
+    else
+        PATCH_URLS+=("https://patch-diff.githubusercontent.com/raw/internetarchive/openlibrary/pull/${arg}.diff")
+    fi
+done
+
 echo "Note: Patch Deploys cannot rebuild js/css"
 echo
 
@@ -33,7 +38,11 @@ SERVERS=${SERVERS:-"ol-web0 ol-web1 ol-web2"}
 PROXY="http://http-proxy.us.archive.org:8080"
 APPLY_OPTIONS=${APPLY_OPTIONS:-""}
 
-echo "Applying patch ${PATCH_URL} to ${SERVERS}:"
+echo "Applying ${#PATCH_URLS[@]} patch(es) to ${SERVERS}:"
+for PATCH_URL in "${PATCH_URLS[@]}"; do
+    echo "  Patch: ${PATCH_URL}"
+done
+echo
 
 for host in $SERVERS; do
     # Determine default container name based on host
@@ -57,7 +66,9 @@ for host in $SERVERS; do
         ssh ${host}.us.archive.org "
             set -e
             cd /opt/openlibrary
-            HTTPS_PROXY=${PROXY} curl -sL "${PATCH_URL}" | git apply $APPLY_OPTIONS
+            $(for url in "${PATCH_URLS[@]}"; do
+                echo "HTTPS_PROXY=${PROXY} curl -sL '${url}' | git apply $APPLY_OPTIONS"
+            done)
         " > $TMP_OUTPUT_FILE
         STATUS=$?
     else
@@ -87,7 +98,9 @@ for host in $SERVERS; do
             export COMPOSE_FILE='/opt/openlibrary/compose.yaml:/opt/openlibrary/compose.production.yaml'
             export HOSTNAME=\$HOSTNAME
             docker compose exec ${SERVICE} bash -c '
-                HTTPS_PROXY=${PROXY} curl -sL ${PATCH_URL} | git apply $APPLY_OPTIONS
+                $(for url in "${PATCH_URLS[@]}"; do
+                    echo "HTTPS_PROXY=${PROXY} curl -sL ${url} | git apply $APPLY_OPTIONS"
+                done)
             ' 2>&1
         " > $TMP_OUTPUT_FILE
 
