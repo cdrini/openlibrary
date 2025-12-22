@@ -4557,7 +4557,7 @@ msgstr ""
 msgid "Add a new author"
 msgstr ""
 
-#: books/author-autocomplete.html
+#: books/author-autocomplete.html books/series-autocomplete.html
 msgid "Create a new record for"
 msgstr ""
 
@@ -4797,6 +4797,18 @@ msgstr ""
 msgid "Links"
 msgstr ""
 
+#: books/edit.html
+msgid "Work Series"
+msgstr ""
+
+#: books/edit.html
+msgid "Is this work part of a larger series?"
+msgstr ""
+
+#: books/edit.html
+msgid "E.g. Harry Potter, The Sword of Truth"
+msgstr ""
+
 #: books/edit.html type/edition/view.html type/work/view.html
 msgid "Work Identifiers"
 msgstr ""
@@ -4825,6 +4837,18 @@ msgstr ""
 #: books/edition-sort.html type/work/editions.html
 #, python-format
 msgid "in %(languagelist)s"
+msgstr ""
+
+#: books/series-autocomplete.html
+msgid "Add a new series"
+msgstr ""
+
+#: books/series-autocomplete.html
+msgid "Remove this series"
+msgstr ""
+
+#: books/series-autocomplete.html
+msgid "Add another series?"
 msgstr ""
 
 #: books/edit/about.html
@@ -7619,6 +7643,11 @@ msgstr ""
 #: type/edition/title_and_author.html
 #, python-format
 msgid "First published in %s"
+msgstr ""
+
+#: type/edition/title_and_author.html
+#, python-format
+msgid "Book %s"
 msgstr ""
 
 #: type/edition/view.html type/work/view.html
