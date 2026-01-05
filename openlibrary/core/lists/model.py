@@ -467,14 +467,7 @@ class Seed:
                 return Seed(list, annotated_seed)
             elif 'key' in seed_json:
                 thing_ref = cast(ThingReferenceDict, seed_json)  # Appease mypy
-                return Seed(
-                    list,
-                    {
-                        'thing': Thing(list._site, thing_ref['key']),
-                        'notes': '',
-                        'position': '',
-                    },
-                )
+                return Seed(list, Thing(list._site, thing_ref['key']))
         return Seed(list, seed_json)
 
     def to_db(self) -> Thing | SeedSubjectString:
@@ -483,16 +476,8 @@ class Seed:
         """
         if isinstance(self.value, str):
             return self.value
-        if self.notes or self.position:
-            return Thing(
-                self._list._site,
-                None,
-                {
-                    'thing': self.value,
-                    **({'notes': self.notes} if self.notes else {}),
-                    **({'position': self.position} if self.position else {}),
-                },
-            )
+        if self.has_metadata():
+            return Thing(self._list._site, None, self.to_annotated_seed())
         else:
             return self.value
 
@@ -678,7 +663,7 @@ class Series(List):
         )
         works = cast(list[Work], web.ctx.site.get_many(work_keys))
         series_edges = [
-            (work, edge) for work in works if (edge := work.get_series_edge(self.key))
+            (work, edge) for work in works if (edge := work.find_series_edge(self.key))
         ]
 
         def get_work_position(position: str | None) -> float:
