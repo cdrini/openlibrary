@@ -1743,7 +1743,8 @@ def setup() -> None:
     web.template.Template.globals.update(h.helpers)
 
     if config.get('use_gzip') is True:
-        config.middleware.append(GZipMiddleware)
+        if GZipMiddleware not in config.middleware:
+            config.middleware.append(GZipMiddleware)
 
 
 if __name__ == '__main__':
