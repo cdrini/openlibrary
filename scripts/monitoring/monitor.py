@@ -108,6 +108,7 @@ async def monitor_partner_useragents():
 
     known_names = extract_agent_counts("""
     309 BookshopLT/1.0 (***@gmail.com)
+    285 WhenCanIReadIt.com/1.0 (***@whencanireadit.com)
     230 BookReadingTime/2.0 (https://bookreadingtime.com; ***@bookreadingtime.com)
     180 CourseworkBot/1.0 (coursework@local)
     180 BookScraper/1.0 (data collection project; contact@example.com)
