@@ -8122,11 +8122,9 @@ msgstr ""
 
 #: StarRatingsByline.html StarRatingsComponent.html
 msgid "rating"
-msgstr ""
-
-#: StarRatingsByline.html StarRatingsComponent.html
-msgid "ratings"
-msgstr ""
+msgid_plural "ratings"
+msgstr[0] ""
+msgstr[1] ""
 
 #. Shows the count of readers who added this book to their "Want to read"
 #. shelf, displayed on search result pages. %(want_to_read_count)s is a
