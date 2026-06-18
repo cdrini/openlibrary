@@ -8129,6 +8129,13 @@ msgstr ""
 msgid "%(want_to_read_count)s Want to read"
 msgstr ""
 
+#: StarRatingsComponent.html
+#, python-format
+msgid "%(average)s (%(count)s rating)"
+msgid_plural "%(average)s (%(count)s ratings)"
+msgstr[0] ""
+msgstr[1] ""
+
 #. Short label displayed next to the count of readers who want to read this
 #. book, shown in the stats bar on a book page. Example: "2,389 Want to read".
 #: StarRatingsStats.html
