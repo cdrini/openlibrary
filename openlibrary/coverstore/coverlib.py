@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 logger = getLogger("openlibrary.coverstore.coverlib")
 
-__all__ = ["read_file", "read_image", "save_image"]
+__all__ = ["read_file", "read_image", "read_image_stream", "save_image"]
 
 
 def save_image(data, category, olid, author=None, ip=None, source_url=None):
@@ -133,10 +133,38 @@ def read_file(path):
         return f.read()
 
 
-def read_image(d: PartialCoverDetails | db.CoverDbDetails, size):
+def get_image_path(d: PartialCoverDetails | db.CoverDbDetails, size):
     if size:
         filename = d["filename_" + size.lower()] or d.filename + f"-{size.upper()}.jpg"
     else:
         filename = d.filename
-    path = find_image_path(filename)
-    return read_file(path)
+    return find_image_path(filename)
+
+
+def read_image(d: PartialCoverDetails | db.CoverDbDetails, size):
+    return read_file(get_image_path(d, size))
+
+
+def read_file_chunks(path, chunk_size=64 * 1024):
+    """Like read_file, but yields the data in chunks instead of loading it all into memory at once."""
+    if ":" in path:
+        path, offset, size = path.rsplit(":", 2)
+        offset, size = int(offset), int(size)
+        with open(path, "rb") as f:
+            f.seek(offset)
+            remaining = size
+            while remaining:
+                data = f.read(min(chunk_size, remaining))
+                if not data:
+                    raise OSError("file truncated")
+                remaining -= len(data)
+                yield data
+    else:
+        with open(path, "rb") as f:
+            while data := f.read(chunk_size):
+                yield data
+
+
+def read_image_stream(d: PartialCoverDetails | db.CoverDbDetails, size):
+    """Like read_image, but returns an iterator of chunks for streaming the response."""
+    return read_file_chunks(get_image_path(d, size))

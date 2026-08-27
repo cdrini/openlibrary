@@ -14,7 +14,7 @@ import web
 from PIL import Image, ImageDraw, ImageFont
 
 from openlibrary.coverstore import config, db
-from openlibrary.coverstore.coverlib import read_file, read_image, save_image
+from openlibrary.coverstore.coverlib import read_file, read_image_stream, save_image
 from openlibrary.coverstore.server import load_config
 from openlibrary.coverstore.utils import (
     changequery,
@@ -300,7 +300,7 @@ class cover:
 
             if d.id >= 8_000_000 and d.uploaded:
                 return web.found(archive.Cover.get_cover_url(d.id, size=size, protocol=web.ctx.protocol))
-            return read_image(d, size)
+            return read_image_stream(d, size)
         except OSError:
             return web.notfound()
 
