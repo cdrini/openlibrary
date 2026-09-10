@@ -91,7 +91,19 @@ A `manifest.json` records the achieved counts and ratios next to the production 
 
 Nothing needs to be downloaded up front: the script streams each per-type dump over
 HTTP and keeps only what it selects, so it needs disk for the output alone. It reads
-~17.7GB either way, which takes on the order of an hour.
+~17.7GB either way, and archive.org is the limiting factor.
+
+That download is throttled per connection, so the script fetches each dump as ordered
+byte ranges over several connections at once (`--connections`, default 8; 1 restores a
+single stream). Measured on the editions dump: one stream holds ~2.9MB/s, four reach
+6.5-9MB/s, and eight spread across the item's two nodes reach ~11MB/s, after which it
+flattens. Chunks are reassembled in order, so the result is still a byte stream gzip
+decompresses on the fly and nothing lands on disk.
+
+The item's BitTorrent link is not a shortcut. Its webseeds are the same two
+`ia######.us.archive.org` hosts, a dump this niche has no peers to speak of, and a
+torrent client would have to write all 12.6GB to disk out of order before anything
+could be decompressed -- losing the streaming that keeps the disk requirement at zero.
 
 ### What the sample preserves
 

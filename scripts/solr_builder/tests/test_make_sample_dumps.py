@@ -1,9 +1,14 @@
+import functools
 import gzip
+import http.server
 import json
+import re
+import threading
 from pathlib import Path
 
 import pytest
 
+from scripts.solr_builder import make_sample_dumps
 from scripts.solr_builder.make_sample_dumps import (
     SALT_ANCHOR,
     SALT_AUTHOR_TOPUP,
@@ -12,11 +17,14 @@ from scripts.solr_builder.make_sample_dumps import (
     Rates,
     Selection,
     collect_refs,
+    fetch_ranges,
     first_author_key,
     frac,
+    http_size,
     iter_refs,
     main,
     parse_row,
+    read_dump,
     resolve_dump_item,
 )
 
@@ -285,3 +293,62 @@ class TestSampling:
         assert set(manifest["types"]) == {"works", "editions", "authors", "other", "redirects", "deletes", "lists"}
         for ratio in manifest["ratios"].values():
             assert 0 <= ratio["sample"] <= 1
+
+
+class TestParallelReads:
+    """
+    Covers the ordered reassembly in `fetch_ranges` against a real (tiny) HTTP server.
+
+    Chunks are fetched concurrently but gzip needs them back in order, so a reordering
+    bug shows up as a decompression failure rather than as subtly wrong data.
+    """
+
+    @pytest.fixture
+    def served(self, tmp_path: Path):
+        # Enough lines that the file spans many chunks at the size used below.
+        path = tmp_path / "dump.txt.gz"
+        with gzip.open(path, "wt") as f:
+            for i in range(20_000):
+                f.write(dump_line("/type/work", f"/works/OL{i}W", {"type": {"key": "/type/work"}, "title": "x" * 200}))
+
+        class RangeHandler(http.server.SimpleHTTPRequestHandler):
+            """SimpleHTTPRequestHandler ignores Range; the code under test needs it."""
+
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                body = path.read_bytes()
+                rng = self.headers.get("Range")
+                if rng and (m := re.match(r"bytes=(\d+)-(\d+)", rng)):
+                    lo, hi = int(m[1]), int(m[2])
+                    body = body[lo : hi + 1]
+                    self.send_response(206)
+                    self.send_header("Content-Range", f"bytes {lo}-{hi}/{path.stat().st_size}")
+                else:
+                    self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Accept-Ranges", "bytes")
+                self.end_headers()
+                self.wfile.write(body)
+
+            do_HEAD = do_GET
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), functools.partial(RangeHandler))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        yield f"http://127.0.0.1:{server.server_port}/dump.txt.gz", path
+        server.shutdown()
+
+    def test_parallel_read_matches_serial_byte_for_byte(self, served, monkeypatch):
+        url, _path = served
+        # Force many chunks out of a small file so ordering actually gets exercised.
+        monkeypatch.setattr(make_sample_dumps, "fetch_ranges", lambda u, s, c, chunk: fetch_ranges(u, s, c, 8192))
+
+        serial = list(read_dump(url, connections=1))
+        parallel = list(read_dump(url, connections=8))
+        assert parallel == serial
+        assert len(serial) == 20_000
+
+    def test_http_size_requires_range_support(self, served):
+        url, path = served
+        assert http_size(url) == path.stat().st_size

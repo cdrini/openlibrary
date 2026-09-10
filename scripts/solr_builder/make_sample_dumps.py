@@ -50,6 +50,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import hashlib
 import json
@@ -60,8 +61,10 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -252,32 +255,138 @@ def dump_location(base: str, date: str, name: str) -> str:
     return f"{base}/{stem}.txt.gz"
 
 
-def read_dump(location: str, max_lines: int = 0) -> Iterator[bytes]:
+def http_size(url: str) -> int | None:
+    """Content length of ``url``, or None if the server won't do byte ranges."""
+    try:
+        out = subprocess.run(
+            ["curl", "-sIL", "--retry", "3", url],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        ).stdout
+    except subprocess.SubprocessError, OSError:
+        return None
+    lengths = re.findall(r"(?im)^content-length:\s*(\d+)", out)
+    if not lengths or not re.search(r"(?im)^accept-ranges:\s*bytes", out):
+        return None
+    return int(lengths[-1])
+
+
+def fetch_ranges(url: str, size: int, connections: int, chunk: int) -> Iterator[bytes]:
+    """
+    Fetch ``url`` as ordered byte ranges over several connections at once.
+
+    archive.org throttles hard per connection -- a single stream off the editions dump
+    holds ~2.9MB/s, while eight across the item's two nodes reach ~11MB/s. Chunks come
+    back in order so the result is still a plain byte stream that gzip can decompress
+    on the fly, which is the whole point: nothing has to land on disk.
+
+    (The item's torrent is not a shortcut here. Its webseeds are these same two hosts,
+    a dump this niche has no peers to speak of, and a torrent client would have to
+    write all 12.6GB to disk out of order before anything could be decompressed.)
+    """
+    hosts = re.match(r"https?://([^/]+)(/.*)$", url)
+    urls = [url]
+    if hosts and re.fullmatch(r"ia\d+\.us\.archive\.org", hosts[1]):
+        # Every item is served from a pair of nodes; spreading across both roughly
+        # doubles what a single node will give us.
+        sibling = hosts[1].replace("ia8", "ia6", 1) if hosts[1].startswith("ia8") else hosts[1].replace("ia6", "ia8", 1)
+        urls.append(f"http://{sibling}{hosts[2]}")
+
+    n_chunks = (size + chunk - 1) // chunk
+
+    def get(i: int) -> bytes:
+        lo, hi = i * chunk, min(size, (i + 1) * chunk) - 1
+        last = None
+        for attempt in range(5):
+            target = urls[(i + attempt) % len(urls)]
+            try:
+                out = subprocess.run(
+                    ["curl", "-sfL", "--retry", "2", "-r", f"{lo}-{hi}", target],
+                    capture_output=True,
+                    timeout=600,
+                    check=False,
+                )
+                if out.returncode == 0 and len(out.stdout) == hi - lo + 1:
+                    return out.stdout
+                last = OSError(f"range {lo}-{hi}: exit {out.returncode}, got {len(out.stdout)} bytes")
+            except (subprocess.SubprocessError, OSError) as e:
+                last = e
+            time.sleep(2 * attempt)
+        raise OSError(f"Could not fetch {url} range {lo}-{hi}") from last
+
+    # Keep a bounded window in flight: enough to hide latency, not so much that the
+    # buffered-but-not-yet-consumed chunks add up to real memory.
+    window = connections + 4
+    with ThreadPoolExecutor(max_workers=connections) as pool:
+        pending = {i: pool.submit(get, i) for i in range(min(window, n_chunks))}
+        try:
+            for i in range(n_chunks):
+                data = pending.pop(i).result()
+                if (nxt := i + window) < n_chunks:
+                    pending[nxt] = pool.submit(get, nxt)
+                yield data
+        finally:
+            for future in pending.values():
+                future.cancel()
+
+
+def read_dump(location: str, max_lines: int = 0, connections: int = 1) -> Iterator[bytes]:
     """
     Stream a gzipped dump line by line, over HTTP or from disk.
 
-    Shells out to gzip (and curl) rather than using ``gzip``/``urllib``: at 12.6GB for
-    the editions dump alone, decompressing in-process roughly doubles the wall clock.
+    Shells out to gzip rather than using the ``gzip`` module: at 12.6GB for the
+    editions dump alone, decompressing in-process roughly doubles the wall clock.
 
     Yields undecoded lines. At ~119M of them, decoding every line to pick 1% of them
     is real time; ``json.loads`` takes bytes and the lines we keep are copied through
     to the output byte for byte.
     """
     unzip = "pigz" if shutil.which("pigz") else "gzip"
-    if location.startswith("http"):
-        cmd = f"curl -sfL --retry 5 --retry-delay 5 {location!r} | {unzip} -dc"
-    else:
-        cmd = f"{unzip} -dc {location!r}"
+    is_http = location.startswith("http")
+    size = http_size(location) if is_http and connections > 1 else None
 
-    proc = subprocess.Popen(
-        f"set -o pipefail; {cmd}",
-        shell=True,
-        executable="/bin/bash",
-        stdout=subprocess.PIPE,
-        # A truncated tail is normal when we stop reading early; don't spam the log.
-        stderr=subprocess.DEVNULL,
-        bufsize=1024 * 1024,
-    )
+    if size:
+        # Parallel ranges, piped into gzip through stdin.
+        proc = subprocess.Popen(
+            [unzip, "-dc"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=1024 * 1024,
+        )
+        feeder_error: list[BaseException] = []
+
+        def feed() -> None:
+            assert proc.stdin is not None
+            try:
+                for block in fetch_ranges(location, size, connections, chunk=32 * 1024 * 1024):
+                    proc.stdin.write(block)
+            except BaseException as e:  # noqa: BLE001 - re-raised on the reading side
+                feeder_error.append(e)
+            finally:
+                with contextlib.suppress(OSError):
+                    proc.stdin.close()
+
+        feeder = threading.Thread(target=feed, daemon=True)
+        feeder.start()
+    else:
+        if is_http:
+            cmd = f"curl -sfL --retry 5 --retry-delay 5 {location!r} | {unzip} -dc"
+        else:
+            cmd = f"{unzip} -dc {location!r}"
+        proc = subprocess.Popen(
+            f"set -o pipefail; {cmd}",
+            shell=True,
+            executable="/bin/bash",
+            stdout=subprocess.PIPE,
+            # A truncated tail is normal when we stop reading early; don't spam the log.
+            stderr=subprocess.DEVNULL,
+            bufsize=1024 * 1024,
+        )
+        feeder = feeder_error = None
+
     assert proc.stdout is not None
     stopped_early = False
     try:
@@ -291,11 +400,18 @@ def read_dump(location: str, max_lines: int = 0) -> Iterator[bytes]:
         if proc.poll() is None:
             proc.terminate()
         proc.wait()
+        if feeder is not None:
+            feeder.join(timeout=30)
 
     # A dropped connection partway through a 12.6GB stream would otherwise look
     # exactly like a shorter dump, and silently produce a sample full of dangling
-    # references. pipefail makes curl's failure the pipeline's failure.
-    if not stopped_early and proc.returncode != 0:
+    # references. pipefail makes curl's failure the pipeline's failure; the parallel
+    # path surfaces it through the feeder thread instead.
+    if stopped_early:
+        return
+    if feeder_error:
+        raise OSError(f"Reading {location} failed") from feeder_error[0]
+    if proc.returncode != 0:
         raise OSError(f"Reading {location} failed with exit code {proc.returncode}; the dump may be truncated")
 
 
@@ -516,6 +632,7 @@ class Sampler:
         anchor: str,
         salt: str,
         max_source_lines: int = 0,
+        connections: int = 8,
     ) -> None:
         self.base = base
         self.date = date
@@ -525,6 +642,7 @@ class Sampler:
         self.anchor = anchor
         self.salt = salt
         self.max_source_lines = max_source_lines
+        self.connections = connections
         self.sel = Selection()
 
     # -- plumbing ------------------------------------------------------------
@@ -540,7 +658,7 @@ class Sampler:
         return gzip.open(self.out_path(name), "wb", compresslevel=6)
 
     def _read(self, name: str) -> Iterator[bytes]:
-        return read_dump(self.source(name), self.max_source_lines)
+        return read_dump(self.source(name), self.max_source_lines, self.connections)
 
     def _record(self, name: str, count: int) -> None:
         self.sel.counts[name] = count
@@ -1003,6 +1121,7 @@ def main(
     osp_dump: Path | None = None,
     prod_stats: Path | None = None,
     max_source_lines: int = 0,
+    connections: int = 8,
     verify: bool = True,
     log_level: str = "INFO",
 ) -> None:
@@ -1021,6 +1140,9 @@ def main(
     :param prod_stats: Optional JSON overriding the measured production figures.
     :param max_source_lines: Read at most this many lines per source dump. For
         smoke-testing the script; produces a badly skewed sample.
+    :param connections: Parallel HTTP range requests per dump. archive.org throttles
+        per connection, so 8 is roughly 4x a single stream; 1 disables it. Ignored for
+        local sources. Buffers up to (connections + 4) * 32MB.
     :param verify: Re-read the output and fail if any reference dangles.
     :param log_level: Python logging level.
     """
@@ -1039,7 +1161,7 @@ def main(
     logger.info("source %s (dump %s), base rate %.6f%%", base, date, 100 * rates.work)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    sampler = Sampler(base, date, out_dir, rates, stats, anchor, salt, max_source_lines)
+    sampler = Sampler(base, date, out_dir, rates, stats, anchor, salt, max_source_lines, connections)
 
     start = time.time()
     sampler.pass_works()
