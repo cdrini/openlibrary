@@ -33,11 +33,11 @@ Sampling scheme (``--anchor author``, the default)::
 Anchoring on authors rather than works is deliberate. Authors are shared -- production
 has 0.37 authors per work because an author averages ~2.5 works. Sampling works
 independently destroys that sharing (each sampled work needs its own ~1.07 authors),
-which inflates authors to ~31% of the sample against a production 13%. Anchoring on
-authors keeps whole bibliographies together and brings that back to ~18%. Closing the
-remaining gap would mean sampling whole connected components of the co-authorship
-graph, which is not worth a union-find over 44M edges for a test fixture. Pass
-``--anchor work`` to compare.
+which inflates authors to roughly 31% of the sample against a production 12.9%.
+Anchoring on authors keeps whole bibliographies together and brings that down to
+~15.2%, measured on a 1M-record run. Closing the last of the gap would mean sampling
+whole connected components of the co-authorship graph, which is not worth a union-find
+over 44M edges for a test fixture. Pass ``--anchor work`` to compare.
 
 Usage::
 
@@ -83,20 +83,19 @@ class ProdStats:
     """
     Production figures the sampler calibrates against.
 
-    Measured 2026-09-10 against the ``ol_dump_2026-08-31`` archive.org item. Counts for
-    the small dumps are exact; ``works``/``editions``/``authors`` are extrapolated from
-    262MB prefixes of the per-type dumps (each prefix spans several complete sweeps of
-    the key space, so it is a representative sample rather than a head slice). The
-    method checks out against production Solr for authors -- 15,420,191 estimated vs
-    15,421,594 reported -- and against a reading-log join for works.
+    Counts are exact, from a full pass over each per-type dump of the
+    ``ol_dump_2026-08-31`` archive.org item on 2026-09-10. The rates below them are
+    estimates from a 262MB prefix of each dump (a prefix spans several complete sweeps
+    of the key space, so it samples the whole range rather than one slice of it).
 
     Refresh with ``--prod-stats <file.json>`` rather than editing, unless the numbers
-    have moved enough to be worth committing.
+    have moved enough to be worth committing. They drift slowly -- the counts moved
+    under 1% against estimates taken from a dump ten days older.
     """
 
-    works: int = 41_438_771
-    editions: int = 56_323_829
-    authors: int = 15_420_191
+    works: int = 41_591_088
+    editions: int = 56_728_501
+    authors: int = 15_412_139
     deletes: int = 3_742_919
     redirects: int = 1_803_760
     lists: int = 264_531
@@ -105,7 +104,8 @@ class ProdStats:
     # Share of works with no `authors` at all; these cannot be author-anchored.
     authorless_work_rate: float = 0.0538
     # Share of editions with no `works` (the `sql/count-orphans.sql` population).
-    orphan_edition_rate: float = 0.0384
+    # Refined from a full 1M-record sampling run; the prefix estimate said 3.84%.
+    orphan_edition_rate: float = 0.0342
     # Author refs per work beyond the first, i.e. the co-authors an author-anchored
     # sample drags in on top of its anchors.
     coauthors_per_work: float = 0.1214
@@ -122,7 +122,7 @@ PROD_STATS = ProdStats()
 
 # Field-level rates the sampler does not steer, but reports against so a regression in
 # the scheme is visible. Measured alongside PROD_STATS.
-PROD_OCAID_RATE = 0.1156
+PROD_OCAID_RATE = 0.1128
 PROD_READING_LOG_RATE = 0.0800  # 3,314,590 works carry a reading-log row
 PROD_RATINGS_RATE = 0.0169  # 701,043 works carry a rating
 
@@ -414,8 +414,34 @@ class Selection:
         return key in self.works or key in self.editions or key in self.authors
 
 
-def collect_refs(doc: dict, sel: Selection) -> None:
-    """Record every key ``doc`` references that reference closure has to satisfy."""
+def iter_refs(type_: str | bytes, doc: dict) -> Iterator[tuple[str, str]]:
+    """
+    Yield ``(kind, key)`` for every reference the Solr indexer actually follows.
+
+    Both the closure passes and ``verify`` go through here, so what the sampler
+    promises to keep resolvable cannot drift from what gets checked.
+
+    Type matters. ``update.py`` routes on ``type.key`` and only ever dereferences
+    fields on works, editions and lists. Tombstones and the handful of mistyped
+    records in the dump (``/type/doc`` and ``/type/macro`` rows carrying ``/books/``
+    keys, authors still holding the legacy ``works`` field) keep stale fields that
+    nothing reads -- treating those as references would demand documents production
+    itself does not have.
+    """
+    if isinstance(type_, bytes):
+        type_ = type_.decode("utf-8", "replace")
+
+    if type_ == "/type/list":
+        for seed in doc.get("seeds") or []:
+            if isinstance(seed, dict):
+                key = seed.get("key") or (seed.get("thing") or {}).get("key")
+                if isinstance(key, str) and key.startswith("/"):
+                    yield "seed", key
+        return
+
+    if type_ not in ("/type/work", "/type/edition"):
+        return
+
     for author in doc.get("authors") or []:
         if not isinstance(author, dict):
             continue
@@ -423,24 +449,46 @@ def collect_refs(doc: dict, sel: Selection) -> None:
         # `normalize_authors` accepts a bare string for the nested form too.
         ref = author.get("author", author)
         key = ref.get("key") if isinstance(ref, dict) else ref
+        # Some records hold an author's *name* where a key belongs. That dangles in
+        # production too, so reproduce it rather than trying to resolve it.
         if isinstance(key, str) and key.startswith("/authors/"):
-            sel.needed_authors.add(key)
+            yield "author", key
 
     for excerpt in doc.get("excerpts") or []:
-        if isinstance(excerpt, dict) and isinstance(excerpt.get("author"), dict) and (key := excerpt["author"].get("key")):
-            sel.needed_authors.add(key)
+        if not isinstance(excerpt, dict) or not isinstance(excerpt.get("author"), dict):
+            continue
+        key = excerpt["author"].get("key")
+        if isinstance(key, str) and key.startswith("/authors/"):
+            yield "author", key
 
     for edge in doc.get("series") or []:
-        if isinstance(edge, dict) and isinstance(edge.get("series"), dict) and (key := edge["series"].get("key")):
+        if not isinstance(edge, dict) or not isinstance(edge.get("series"), dict):
+            continue
+        if isinstance(key := edge["series"].get("key"), str):
+            yield "series", key
+
+    for lang in (doc.get("languages") or []) + (doc.get("translated_from") or []):
+        if isinstance(lang, dict) and isinstance(key := lang.get("key"), str):
+            yield "language", key
+
+    if type_ == "/type/edition":
+        for work in doc.get("works") or []:
+            if isinstance(work, dict) and isinstance(key := work.get("key"), str):
+                yield "work", key
+
+
+def collect_refs(type_: str | bytes, doc: dict, sel: Selection) -> None:
+    """Record every key ``doc`` references that reference closure has to satisfy."""
+    for kind, key in iter_refs(type_, doc):
+        if kind == "author":
+            sel.needed_authors.add(key)
+        elif kind == "series":
             sel.needed_series.add(key)
-
-    for lang in doc.get("languages") or []:
-        if isinstance(lang, dict) and (key := lang.get("key")):
-            sel.needed_languages.add(key)
-    for lang in doc.get("translated_from") or []:
-        if isinstance(lang, dict) and (key := lang.get("key")):
+        elif kind == "language":
             sel.needed_languages.add(key)
 
+    # Not a reference in the breaking sense -- `get_cover_dimensions` returns None
+    # for an unknown id -- but the covers dump is filtered to these.
     for cover in doc.get("covers") or []:
         if isinstance(cover, int) and cover > 0:
             sel.needed_covers.add(cover)
@@ -530,7 +578,7 @@ class Sampler:
                 out.write(line)
                 kept += 1
                 self.sel.works.add(key)
-                collect_refs(doc, self.sel)
+                collect_refs(_type, doc, self.sel)
         prog.kept = kept
         prog.done()
         self._record("works", kept)
@@ -565,9 +613,10 @@ class Sampler:
                     if row is None:
                         continue
                     _type, key, doc = row
-                    if doc.get("works"):
+                    work_key = (doc.get("works") or [{}])[0].get("key")
+                    if work_key:
                         # Regex missed it (unusual formatting); re-check properly.
-                        if doc["works"][0].get("key") not in self.sel.works:
+                        if work_key not in self.sel.works:
                             continue
                     else:
                         if self.frac(key, SALT_ORPHAN) >= self.rates.orphan_edition:
@@ -578,7 +627,7 @@ class Sampler:
                 kept += 1
                 ocaids += bool(doc.get("ocaid"))
                 self.sel.editions.add(key)
-                collect_refs(doc, self.sel)
+                collect_refs(_type, doc, self.sel)
         prog.kept = kept
         prog.done()
         self._record("editions", kept)
@@ -647,7 +696,12 @@ class Sampler:
 
     def pass_redirects(self) -> None:
         """
-        Emit redirects whose target is in the sample.
+        Emit every redirect whose target is in the sample.
+
+        Deliberately no hash gate on top of the target check. A redirect points at one
+        arbitrary document, so it lands in the sample with probability ~p already --
+        keeping all of them yields the production share on its own. Gating on a hash
+        as well makes it p squared, which under-sampled redirects roughly 40-fold.
 
         Also emits any redirect that satisfies an outstanding author ref: production
         has works pointing at author keys that turn out to be redirects, and
@@ -655,27 +709,37 @@ class Sampler:
         the key being absent entirely.
         """
         prog = Progress("redirects", every=1_000_000)
-        kept = 0
-        with self._writer("redirects") as out:
-            for line in self._read("redirects"):
-                prog.tick(kept)
-                row = parse_row(line)
-                if row is None:
-                    continue
-                _type, key, doc = row
+        target = max(1, int(self.rates.redirect * self.stats.redirects))
+        mandatory: list[bytes] = []
+        candidates: list[tuple[float, bytes]] = []
 
-                resolves_a_ref = key in self.sel.needed_authors and key not in self.sel.authors
-                location = doc.get("location")
-                sampled = self.frac(key, SALT_ANCHOR) < self.rates.redirect and isinstance(location, str) and self.sel.resolves(location)
-                if not (resolves_a_ref or sampled):
-                    continue
+        for line in self._read("redirects"):
+            prog.tick(len(mandatory) + len(candidates))
+            row = parse_row(line)
+            if row is None:
+                continue
+            _type, key, doc = row
+
+            if key in self.sel.needed_authors and key not in self.sel.authors:
+                mandatory.append(line)
+            elif isinstance(location := doc.get("location"), str) and self.sel.resolves(location):
+                candidates.append((self.frac(key, SALT_ANCHOR), line))
+        prog.done()
+
+        # Redirects pile up on documents that absorbed merges, and those are exactly
+        # the well-connected authors and works a reference-closed sample is most
+        # likely to contain -- so "every redirect whose target is present" overshoots
+        # the production share several-fold. Trim deterministically to the target.
+        candidates.sort()
+        lines = mandatory + [line for _, line in candidates[: max(0, target - len(mandatory))]]
+        with self._writer("redirects") as out:
+            for line in lines:
                 out.write(line)
-                kept += 1
+                key = line.split(b"\t", 3)[1]
                 if key.startswith(b"/authors/"):
                     self.sel.authors.add(key)
-        prog.kept = kept
-        prog.done()
-        self._record("redirects", kept)
+        logger.info("redirects: kept %s of %s resolvable", f"{len(lines):,}", f"{len(candidates) + len(mandatory):,}")
+        self._record("redirects", len(lines))
 
     def pass_deletes(self) -> None:
         """Emit hash-sampled tombstones, plus any that satisfy an outstanding ref."""
@@ -838,26 +902,7 @@ class Sampler:
             _type, key_bytes, doc = row
             key = key_bytes.decode("utf-8", "replace")
             present.add(key)
-            for author in doc.get("authors") or []:
-                if isinstance(author, dict):
-                    ref = author.get("author", author)
-                    ref_key = ref.get("key") if isinstance(ref, dict) else ref
-                    if isinstance(ref_key, str) and ref_key.startswith("/authors/"):
-                        refs.append((key, ref_key))
-            for edge in doc.get("series") or []:
-                if isinstance(edge, dict) and isinstance(edge.get("series"), dict) and (ref_key := edge["series"].get("key")):
-                    refs.append((key, ref_key))
-            for lang in (doc.get("languages") or []) + (doc.get("translated_from") or []):
-                if isinstance(lang, dict) and (ref_key := lang.get("key")):
-                    refs.append((key, ref_key))
-            for work in doc.get("works") or []:
-                if isinstance(work, dict) and (ref_key := work.get("key")):
-                    refs.append((key, ref_key))
-            for seed in doc.get("seeds") or []:
-                if isinstance(seed, dict):
-                    ref_key = seed.get("key") or (seed.get("thing") or {}).get("key")
-                    if isinstance(ref_key, str) and ref_key.startswith("/"):
-                        refs.append((key, ref_key))
+            refs.extend((key, ref) for _kind, ref in iter_refs(_type, doc))
         prog.done()
 
         dangling = [(src, dst) for src, dst in refs if dst not in present]

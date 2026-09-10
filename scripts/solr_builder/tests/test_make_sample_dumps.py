@@ -14,6 +14,7 @@ from scripts.solr_builder.make_sample_dumps import (
     collect_refs,
     first_author_key,
     frac,
+    iter_refs,
     main,
     parse_row,
     resolve_dump_item,
@@ -159,9 +160,24 @@ class TestHelpers:
         assert first_author_key(legacy) == "/authors/OL3A"
         assert first_author_key({"authors": []}) is None
 
+    def test_refs_are_only_followed_on_types_the_indexer_dereferences(self):
+        # A tombstone or a mistyped /type/doc row keeps stale fields that update.py
+        # never reads; treating those as references would demand records that do not
+        # exist in production either.
+        stale = {"authors": [{"author": {"key": "/authors/OL1A"}}], "works": [{"key": "/works/OL1W"}]}
+        assert list(iter_refs("/type/delete", stale)) == []
+        assert list(iter_refs("/type/doc", stale)) == []
+        assert list(iter_refs("/type/author", stale)) == []
+        assert list(iter_refs("/type/edition", stale)) == [("author", "/authors/OL1A"), ("work", "/works/OL1W")]
+
+    def test_refs_skip_author_names_used_where_a_key_belongs(self):
+        # These dangle in production too; resolving them is not possible.
+        assert list(iter_refs("/type/edition", {"authors": [{"key": "Earlene Sherman"}]})) == []
+
     def test_collect_refs_picks_up_every_kind(self):
         sel = Selection()
         collect_refs(
+            "/type/edition",
             {
                 "authors": [{"author": {"key": "/authors/OL1A"}}],
                 "excerpts": [{"author": {"key": "/authors/OL2A"}}],

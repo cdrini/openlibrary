@@ -111,11 +111,15 @@ re-reads the finished sample and fails the run if anything dangles.
 
 ### Known deviations
 
-- **Authors are over-represented** -- ~18% of records against production's 13%.
-  Authors are shared (~2.5 works each), and a sub-1% sample mostly breaks that sharing
-  up. Sampling anchored on authors rather than works keeps bibliographies together and
-  recovers most of it; the rest would need whole connected components of the
-  co-authorship graph. `--anchor work` shows the unmitigated version (~31%).
+- **Authors are over-represented** -- 15.2% of records on a 1M-record run, against
+  production's 12.9%. Authors are shared (~2.5 works each) and a sub-1% sample mostly
+  breaks that sharing up. Anchoring on authors rather than works keeps bibliographies
+  together and recovers most of it; the rest would need whole connected components of
+  the co-authorship graph. `--anchor work` shows the unmitigated version (~31%).
+- **`other` runs high** -- 0.4% against production's 0.08%. Every non-subject record
+  in that dump is kept whole, because it holds the schema types, languages and series
+  that reference closure needs. It is ~3.6k records regardless of sample size, so the
+  effect shrinks as the sample grows.
 - **Lists keep fewer seeds than they do in production.** A list's seeds are spread
   across the whole corpus, so at these rates few survive; seeds are pruned to what is
   present and lists left with none are dropped. The number of lists still tracks
