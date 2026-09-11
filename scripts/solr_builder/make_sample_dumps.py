@@ -124,8 +124,11 @@ class ProdStats:
 PROD_STATS = ProdStats()
 
 # Field-level rates the sampler does not steer, but reports against so a regression in
-# the scheme is visible. Measured alongside PROD_STATS.
-PROD_OCAID_RATE = 0.1128
+# the scheme is visible. Measured independently of any sampling run, off a 262MB prefix
+# of each dump, so the manifest's comparison stays a real check rather than the sample
+# grading itself. A 1M-record sample reads ocaid at 11.3% against the 11.6% here; the
+# two methods differ by about that much throughout.
+PROD_OCAID_RATE = 0.1156
 PROD_READING_LOG_RATE = 0.0800  # 3,314,590 works carry a reading-log row
 PROD_RATINGS_RATE = 0.0169  # 701,043 works carry a rating
 
