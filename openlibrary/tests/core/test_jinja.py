@@ -285,7 +285,7 @@ class TestGetJinjaEnv:
         monkeypatch.setitem(env.globals, "icon", lambda *a, **kw: "")
         tpl = env.get_template("AffiliateLinks.html.jinja")
         output = tpl.render(
-            primary_stores=[
+            stores=[
                 {
                     "key": "teststore",
                     "analytics_key": "TestStore",
@@ -294,7 +294,6 @@ class TestGetJinjaEnv:
                     "price": None,  # StrictUndefined - must include all accessed attrs
                 }
             ],
-            more_stores=[],
             price_lookup=None,
         )
         # Should contain the store link
