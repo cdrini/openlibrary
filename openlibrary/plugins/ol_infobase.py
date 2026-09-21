@@ -479,42 +479,6 @@ def _process_data(data):
         return data
 
 
-def safeint(value, default=0):
-    """Convert the value to integer. Returns default, if the conversion fails."""
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def fix_table_of_contents(table_of_contents):
-    """Some books have bad table_of_contents. This function converts them in to correct format."""
-
-    def row(r):
-        if isinstance(r, str):
-            level = 0
-            label = ""
-            title = str(r)
-            pagenum = ""
-        elif "value" in r:
-            level = 0
-            label = ""
-            title = str(r["value"])
-            pagenum = ""
-        elif isinstance(r, dict):
-            level = safeint(r.get("level", "0"), 0)
-            label = r.get("label", "")
-            title = r.get("title", "")
-            pagenum = r.get("pagenum", "")
-        else:
-            return {}
-
-        return {"level": level, "label": label, "title": title, "pagenum": pagenum}
-
-    d = [row(r) for r in table_of_contents]
-    return [row for row in d if any(row.values())]
-
-
 def process_json(key, json_str):
     if key is None or json_str is None:
         return None
@@ -530,10 +494,6 @@ def process_json(key, json_str):
     ]:
         data = json.loads(json_str)
         data = _process_data(data)
-
-        if base == "books" and "table_of_contents" in data:
-            data["table_of_contents"] = fix_table_of_contents(data["table_of_contents"])
-
         json_str = json.dumps(data)
     return json_str
 

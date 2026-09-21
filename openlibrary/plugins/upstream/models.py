@@ -390,7 +390,9 @@ class Edition(models.Edition):
         if not self.table_of_contents:
             return None
 
-        return TableOfContents.from_db(self.table_of_contents)
+        # Legacy rows can all be unusable, leaving nothing to render.
+        toc = TableOfContents.from_db(self.table_of_contents)
+        return toc if toc.entries else None
 
     def set_toc_text(self, text: str | None):
         if text:

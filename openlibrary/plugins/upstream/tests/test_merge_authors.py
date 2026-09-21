@@ -139,11 +139,15 @@ class TestBasicMergeEngine:
 def test_get_many():
     web.ctx.site = MockSite()
     site.set(web.ctx.site)
-    # get_many should handle bad table_of_contents in the edition.
+    # get_many should handle bad table_of_contents in the edition, without
+    # discarding the fields a well-formed toc_item carries.
     edition = {
         "key": "/books/OL1M",
         "type": {"key": "/type/edition"},
-        "table_of_contents": [{"type": "/type/text", "value": "foo"}],
+        "table_of_contents": [
+            {"type": "/type/text", "value": "foo"},
+            {"level": 0, "title": "bar", "authors": [{"name": "Alice Author"}], "subtitle": "A beginning"},
+        ],
     }
     type_edition = {"key": "/type/edition", "type": {"key": "/type/type"}}
     web.ctx.site.add([edition, type_edition])
@@ -153,7 +157,10 @@ def test_get_many():
     assert get_many(["/books/OL1M"])[0] == {
         "key": "/books/OL1M",
         "type": {"key": "/type/edition"},
-        "table_of_contents": [{"label": "", "level": 0, "pagenum": "", "title": "foo"}],
+        "table_of_contents": [
+            {"level": 0, "title": "foo"},
+            {"level": 0, "title": "bar", "authors": [{"name": "Alice Author"}], "subtitle": "A beginning"},
+        ],
     }
 
 

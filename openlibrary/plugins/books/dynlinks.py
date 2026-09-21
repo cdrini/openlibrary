@@ -13,6 +13,7 @@ from openlibrary.core import helpers as h
 from openlibrary.core.imports import ImportItem
 from openlibrary.core.models import Edition
 from openlibrary.plugins.openlibrary.processors import urlsafe
+from openlibrary.plugins.upstream.table_of_contents import TableOfContents
 from openlibrary.plugins.worksearch.search import get_solr
 from openlibrary.solr.solr_types import SolrDocument
 
@@ -278,23 +279,16 @@ class DataProcessor:
             }
 
         def format_table_of_contents(toc):
-            # after openlibrary.plugins.upstream.models.get_table_of_contents
-            def row(r):
-                if isinstance(r, str):
-                    level = 0
-                    label = ""
-                    title = r
-                    pagenum = ""
-                else:
-                    level = h.safeint(r.get("level", "0"), 0)
-                    label = r.get("label", "")
-                    title = r.get("title", "")
-                    pagenum = r.get("pagenum", "")
-                r = {"level": level, "label": label, "title": title, "pagenum": pagenum}
-                return r
-
-            d = [row(r) for r in toc]
-            return [row for row in d if any(row.values())]
+            # This API has always published exactly these four fields.
+            return [
+                {
+                    "level": entry.level,
+                    "label": entry.label or "",
+                    "title": entry.title or "",
+                    "pagenum": entry.pagenum or "",
+                }
+                for entry in TableOfContents.from_db(toc).entries
+            ]
 
         d = {
             "url": get_url(doc),
