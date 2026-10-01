@@ -95,7 +95,7 @@ authoritative while covering a tiny, biased slice of the index.
 
 Solr mechanics
 --------------
-ebook_unavailable and ebook_becomes_available are numeric so writes qualify for
+ebook_unavailable is numeric so writes qualify for
 Solr's update.partial.requireInPlace: string and pdate fields are rejected by
 Solr for in-place updates regardless of docValues/stored/indexed config, and a
 *non*-in-place atomic update to a nested child document reindexes the entire
@@ -103,12 +103,6 @@ work + all its editions rather than just the one document, which would defeat
 the point of a near-realtime updater. Edition updates therefore always include
 "_root_" (the parent work's key) -- Solr requires this to target a child
 document rather than create/replace a root-level one.
-
-Solr also rejects "set": null under requireInPlace -- a value can be set or
-incremented in-place, but not cleared, even on a field with no prior value.
-So a book freeing up never clears ebook_becomes_available; it's left at its
-last (now stale) value. ebook_becomes_available is advisory display data
-("available in N days") and is meaningful only while ebook_unavailable is 1.
 
 Recovering from drift
 ---------------------
@@ -135,9 +129,7 @@ guarantees (indexer-side field preservation, a reindex-triggered re-apply, or
 wipe auto-detection) are a maintainer follow-up, out of scope here.
 """
 
-import contextlib
 import datetime
-import json
 import logging
 import time
 from pathlib import Path
@@ -297,9 +289,8 @@ def find_start_uid(target_age_days: int = LOAN_MAX_AGE_DAYS) -> int:
 def collect_dirty_identifiers(rows: list[dict]) -> dict[str, dict]:
     """Reduce a batch of rows to the set of identifiers needing a ground-truth check.
 
-    Returns {identifier: {"uid": int, "until": str|None, "event_type": str}}
-    for the highest-uid row seen per identifier. "until" is the loan-expiry
-    string from that row, kept as advisory display data.
+    Returns {identifier: {"uid": int, "event_type": str}} for the highest-uid
+    row seen per identifier.
 
     The event type IS interpreted now, by :func:`build_solr_updates` -- an
     earlier revision of this module deliberately did not, because a borrow of
@@ -320,23 +311,8 @@ def collect_dirty_identifiers(rows: list[dict]) -> dict[str, dict]:
             continue
         if identifier in latest and latest[identifier]["uid"] >= uid:
             continue
-        until = None
-        with contextlib.suppress(json.JSONDecodeError, TypeError, AttributeError):
-            until = json.loads(row.get("extra") or "{}").get("until")
-        latest[identifier] = {"uid": uid, "until": until, "event_type": row.get("event_type") or ""}
+        latest[identifier] = {"uid": uid, "event_type": row.get("event_type") or ""}
     return latest
-
-
-def ia_until_to_epoch(until: str | None) -> int | None:
-    """Convert IA 'until' string ("2026-05-01 15:42:43", implicitly UTC) to epoch seconds."""
-    if not until:
-        return None
-    try:
-        dt = datetime.datetime.strptime(until, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.UTC)
-        return int(dt.timestamp())
-    except ValueError:
-        logger.debug("Could not parse 'until' value: %r", until)
-        return None
 
 
 def resolve_edition_keys(identifiers: list[str]) -> dict[str, dict]:
@@ -440,11 +416,6 @@ def build_solr_updates(
     mid-reindex. There is no doc to mark, so the event is skipped while last_uid
     still advances; the book is missed until its next event or a --reset
     rebuild. Accepted as v1: an unindexed book has no searchable doc anyway.
-
-    ebook_becomes_available is written only alongside ebook_unavailable=1, and
-    only when the row carried a parsable expiry. It is never cleared when a book
-    frees up (requireInPlace rejects "set": null), so it is advisory and
-    meaningful only while ebook_unavailable is 1.
     """
     updates = []
     unrecognized: dict[str, int] = {}
@@ -463,16 +434,14 @@ def build_solr_updates(
             # log and Sentry.
             unrecognized[event_type] = unrecognized.get(event_type, 0) + 1
 
-        update: dict = {
-            "key": edition["key"],
-            "_root_": edition["root"],
-            "ebook_unavailable": {"set": EBOOK_UNAVAILABLE},
-            "loan_uid": {"set": state["uid"]},
-        }
-        becomes_available = ia_until_to_epoch(state.get("until"))
-        if becomes_available is not None:
-            update["ebook_becomes_available"] = {"set": becomes_available}
-        updates.append(update)
+        updates.append(
+            {
+                "key": edition["key"],
+                "_root_": edition["root"],
+                "ebook_unavailable": {"set": EBOOK_UNAVAILABLE},
+                "loan_uid": {"set": state["uid"]},
+            }
+        )
 
     if unrecognized:
         # Not an error -- IA's event_type vocabulary is not published, so this is

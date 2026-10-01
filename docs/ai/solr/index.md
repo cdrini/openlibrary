@@ -186,12 +186,11 @@ The enum is **sortable** — Solr can range-query it. This is how availability f
 
 Written to **edition** documents by `scripts/solr_updater/loan_availability_updater.py`, a daemon that follows Internet Archive's loan-changes feed. See that module's docstring for the two-loop design; this section covers the schema side.
 
-Three fields, all `pint`/`plong`, all `docValues=true stored=false indexed=false`:
+Two fields, both `pint`/`plong`, both `docValues=true stored=false indexed=false`:
 
 | Field | Meaning |
 |---|---|
 | `ebook_unavailable` | `1` = no borrowing capacity right now. Absent or `0` = available. |
-| `ebook_becomes_available` | Epoch seconds the current loan expires. Advisory display data only. |
 | `loan_uid` | The changes-feed cursor that produced the last write. Also the daemon's resume point. |
 
 **These record exceptions, not state.** An `ebook_access:borrowable` edition is assumed AVAILABLE unless `ebook_unavailable=1` says otherwise, so the common case writes nothing. Consumers must query:
@@ -222,8 +221,6 @@ Caveats: one node, one shard, no replicas, no concurrent query load, and synthet
 So an edition-level filter such as `genre_key:X AND ebook_access:borrowable AND -ebook_unavailable:1` is viable **without changing the field design**. `indexed=true` is not required and should be avoided: it forfeits in-place updates, and a non-in-place atomic update to a nested child reindexes the parent work and all its editions.
 
 The fields stay absent from `EditionSearchScheme.all_fields`. That governs whether a bare `field:value` typed by an end user is treated as a Solr field — a separate question from whether internal code may build an `fq` on them, which it may.
-
-**`ebook_becomes_available` is never cleared.** `requireInPlace` rejects `"set": null` unconditionally — you cannot clear a field in place, even one that has no value. So when a book frees up the timestamp is left at its last value rather than removed. It is meaningful **only** while `ebook_unavailable=1`; read at any other time it is stale.
 
 **Operating a cold start, and `--reset`.** The daemon cold-starts whenever it has no cursor (first deploy, lost state file, or `--reset`). It collects every identifier the loan-changes feed touched over `LOAN_MAX_AGE_DAYS` (14), resolves them to Solr editions, and settles them against IA's availability service in one pass **before** following any events. It will not enter steady state until that succeeds.
 

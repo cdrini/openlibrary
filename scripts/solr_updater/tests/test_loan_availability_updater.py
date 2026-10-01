@@ -18,7 +18,6 @@ from scripts.solr_updater.loan_availability_updater import (
     build_solr_updates,
     collect_dirty_identifiers,
     find_start_uid,
-    ia_until_to_epoch,
     is_releasing_event,
     main,
     query_solr_uid,
@@ -43,19 +42,6 @@ def test_read_write_state_roundtrip(tmp_path):
     p = tmp_path / "state"
     write_state(p, 42000)
     assert read_state(p) == 42000
-
-
-def test_ia_until_to_epoch_valid():
-    expected = int(datetime.datetime(2026, 5, 1, 15, 42, 43, tzinfo=datetime.UTC).timestamp())
-    assert ia_until_to_epoch("2026-05-01 15:42:43") == expected
-
-
-def test_ia_until_to_epoch_none():
-    assert ia_until_to_epoch(None) is None
-
-
-def test_ia_until_to_epoch_invalid():
-    assert ia_until_to_epoch("not-a-date") is None
 
 
 BORROW_ROW = {
@@ -98,13 +84,12 @@ UNAVAILABLE = {"status": "borrow_unavailable", "available_to_browse": False, "av
 
 def test_collect_dirty_single_borrow():
     result = collect_dirty_identifiers([BORROW_ROW])
-    assert result == {"bookabc": {"uid": 100, "until": "2026-05-15 10:00:00", "event_type": "borrow"}}
+    assert result == {"bookabc": {"uid": 100, "event_type": "borrow"}}
 
 
 def test_collect_dirty_latest_uid_wins():
     result = collect_dirty_identifiers([BORROW_ROW, RETURN_ROW])
     assert result["bookabc"]["uid"] == 200
-    assert result["bookabc"]["until"] is None
 
 
 def test_collect_dirty_latest_uid_wins_reverse_order():
@@ -123,7 +108,7 @@ def test_collect_dirty_keeps_the_event_type_for_the_writer():
     """It used to be discarded here. build_solr_updates needs it to tell an
     acquiring event from a releasing one, so collapsing rows must not lose it."""
     row = {"identifier": "bookabc", "uid": 7, "event_type": "some_future_event", "extra": "{}"}
-    assert collect_dirty_identifiers([row]) == {"bookabc": {"uid": 7, "until": None, "event_type": "some_future_event"}}
+    assert collect_dirty_identifiers([row]) == {"bookabc": {"uid": 7, "event_type": "some_future_event"}}
 
 
 @pytest.mark.parametrize(
@@ -154,17 +139,6 @@ def test_collect_dirty_row_with_no_event_type_still_counts():
     assert "bookabc" in collect_dirty_identifiers([row])
 
 
-def test_collect_dirty_bad_extra_json():
-    result = collect_dirty_identifiers([dict(BORROW_ROW, extra="not-json")])
-    assert result["bookabc"]["until"] is None
-
-
-def test_collect_dirty_extra_json_not_an_object():
-    """extra could be valid JSON that isn't a dict; .get() on it must not crash."""
-    result = collect_dirty_identifiers([dict(BORROW_ROW, extra="[1, 2, 3]")])
-    assert result["bookabc"]["until"] is None
-
-
 def test_collect_dirty_skips_malformed_rows():
     """A row missing identifier, or carrying a non-int uid, must be skipped rather
     than crash the updater."""
@@ -191,7 +165,6 @@ def test_build_solr_updates_acquiring_event_marks_unavailable():
             "_root_": "/works/OL1W",
             "ebook_unavailable": {"set": EBOOK_UNAVAILABLE},
             "loan_uid": {"set": 100},
-            "ebook_becomes_available": {"set": ia_until_to_epoch("2026-05-15 10:00:00")},
         }
     ]
 
@@ -268,14 +241,6 @@ def test_build_solr_updates_does_not_consult_availability():
 def test_build_solr_updates_unknown_identifier_skipped():
     dirty = collect_dirty_identifiers([BORROW_ROW])
     assert build_solr_updates(dirty, {}) == []
-
-
-def test_build_solr_updates_unavailable_without_until_omits_becomes_available():
-    """No expiry in the event means no advisory timestamp; the re-check does not
-    depend on this field."""
-    row = {"identifier": "bookabc", "uid": 100, "event_type": "borrow", "extra": "{}"}
-    updates = build_solr_updates(collect_dirty_identifiers([row]), ID_TO_EDITION)
-    assert "ebook_becomes_available" not in updates[0]
 
 
 def test_build_solr_updates_mixed_batch():
@@ -634,7 +599,7 @@ def _run_main_one_iteration(tmp_path, solr_mock, lending_mock, first_batch_rows,
 @patch("scripts.solr_updater.loan_availability_updater.load_config")
 def test_main_calls_update_in_place_not_bare_update(mock_config, mock_infogami, mock_lending, mock_sentry, mock_get_solr, tmp_path):
     """The daemon must call update_in_place(), never bare update(), at all Solr write
-    sites -- ebook_unavailable/ebook_becomes_available are numeric specifically so
+    sites -- ebook_unavailable is numeric specifically so
     this is possible."""
     solr = MagicMock()
     mock_get_solr.return_value = solr
