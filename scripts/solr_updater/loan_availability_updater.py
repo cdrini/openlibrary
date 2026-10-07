@@ -300,7 +300,25 @@ def _describe(request: list[dict]) -> str:
 
 
 async def solr_update_in_place(request: list[dict], commit: bool = False) -> None:
-    """Write the batch, or raise with enough detail to act on.
+    """Write the updates, in batches once there are more than
+    SOLR_WRITE_BATCH_THRESHOLD, or raise with enough detail to act on.
+
+    Batches go one after another, each its own request with its own timeout,
+    and the first failure stops the rest. Batches before it have landed, which
+    is fine: every poll reconciles the whole unavailable set against what Solr
+    has marked, so the next one rebuilds only what is still missing.
+    """
+    batches = (
+        [request] if len(request) <= SOLR_WRITE_BATCH_THRESHOLD else [list(batch) for batch in itertools.batched(request, SOLR_WRITE_BATCH_SIZE, strict=False)]
+    )
+    # Before the write, so a write that times out still leaves its size behind.
+    logger.info("Writing %s to Solr in %d request(s)", _describe(request), len(batches))
+    for i, batch in enumerate(batches, start=1):
+        await _write_batch(batch, commit, label=f"batch {i}/{len(batches)}")
+
+
+async def _write_batch(request: list[dict], commit: bool, label: str) -> None:
+    """One in-place update request.
 
     update_in_place_async returns the parsed response without checking status
     -- other callers (trending_updater_daily/hourly) rely on that and just log
@@ -318,7 +336,7 @@ async def solr_update_in_place(request: list[dict], commit: bool = False) -> Non
       write. The whole batch is rejected over one such document, so the field
       list and sample keys are how the offending one gets found.
     """
-    described = _describe(request)
+    described = f"{label}: {_describe(request)}"
     try:
         resp = await get_solr().update_in_place_async(request, commit=commit, _timeout=SOLR_WRITE_TIMEOUT)
     except Exception as exc:
@@ -358,6 +376,17 @@ poll has to rebuild it; waiting is the cheaper failure.
 Comfortably inside POLL_INTERVAL * 2, so a slow write cannot stack cycles up
 behind it.
 """
+
+SOLR_WRITE_BATCH_THRESHOLD = 250
+"""Above this many updates, the write is split into SOLR_WRITE_BATCH_SIZE
+requests. A steady-state poll writes only what changed since the last one and
+stays a single request; a cold start or a mass clear can carry the whole
+unavailable set (hundreds) at once, which is what was timing out."""
+
+SOLR_WRITE_BATCH_SIZE = 100
+"""Updates per request once a write is split. Small enough that each request
+finishes well inside SOLR_WRITE_TIMEOUT while contending with the main
+solr_updater; each batch gets the whole timeout to itself."""
 
 MARKED_SET_MAX = 50_000
 """Ceiling on the marked set read back from Solr.
