@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from openlibrary.core import lending
@@ -19,6 +20,9 @@ from scripts.solr_updater.loan_availability_updater import (
     EBOOK_UNAVAILABLE,
     MARKED_SET_MAX,
     SOLR_QUERY_CHUNK,
+    SOLR_WRITE_BATCH_SIZE,
+    SOLR_WRITE_BATCH_THRESHOLD,
+    SOLR_WRITE_TIMEOUT,
     PollRefused,
     SolrWriteFailed,
     build_poll_updates,
@@ -160,6 +164,68 @@ async def test_a_refused_write_is_logged_with_the_batch_it_refused(caplog):
         await solr_update_in_place(batch)
     assert "/books/OL1M" in caplog.text
     assert "no in-place update" in caplog.text, "Solr's own words, not just our summary"
+
+
+def _marks(n):
+    return [{"key": f"/books/OL{i}M", "_root_": f"/works/OL{i}W", "ebook_unavailable": {"set": EBOOK_UNAVAILABLE}} for i in range(n)]
+
+
+def _solr_answering(*answers):
+    solr = MagicMock(spec=Solr)
+    solr.update_in_place_async = AsyncMock(side_effect=list(answers))
+    return solr
+
+
+_SOLR_OK = {"responseHeader": {"status": 0, "QTime": 5}}
+
+
+@pytest.mark.asyncio
+async def test_solr_update_in_place_logs_its_size_before_a_write_that_times_out(caplog):
+    """A read timeout says nothing about how big the write was; the line logged
+    beforehand is the only record of it."""
+    solr = _solr_answering(httpx.ReadTimeout("timed out"))
+    with (
+        patch("scripts.solr_updater.loan_availability_updater.get_solr", return_value=solr),
+        caplog.at_level(logging.INFO, logger="openlibrary.loan-availability-updater"),
+        pytest.raises(SolrWriteFailed),
+    ):
+        await solr_update_in_place(_marks(3))
+    assert "Writing 3 docs (3 mark, 0 clear)" in caplog.text
+    assert caplog.text.index("Writing 3 docs") < caplog.text.index("ReadTimeout")
+
+
+@pytest.mark.asyncio
+async def test_solr_update_in_place_up_to_the_threshold_is_one_request():
+    solr = _solr_answering(_SOLR_OK)
+    with patch("scripts.solr_updater.loan_availability_updater.get_solr", return_value=solr):
+        await solr_update_in_place(_marks(SOLR_WRITE_BATCH_THRESHOLD))
+    assert solr.update_in_place_async.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_solr_update_in_place_over_the_threshold_is_split_into_batches():
+    n = SOLR_WRITE_BATCH_THRESHOLD + 1
+    expected = -(-n // SOLR_WRITE_BATCH_SIZE)
+    solr = _solr_answering(*[_SOLR_OK] * expected)
+    updates = _marks(n)
+    with patch("scripts.solr_updater.loan_availability_updater.get_solr", return_value=solr):
+        await solr_update_in_place(updates)
+    sent = [call.args[0] for call in solr.update_in_place_async.call_args_list]
+    assert [len(batch) for batch in sent] == [SOLR_WRITE_BATCH_SIZE] * (expected - 1) + [n - SOLR_WRITE_BATCH_SIZE * (expected - 1)]
+    assert [doc for batch in sent for doc in batch] == updates
+    assert all(call.kwargs["_timeout"] == SOLR_WRITE_TIMEOUT for call in solr.update_in_place_async.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_solr_update_in_place_stops_at_the_first_failed_batch():
+    """Later batches are not attempted; the next poll rebuilds what is missing."""
+    solr = _solr_answering(_SOLR_OK, httpx.ReadTimeout("timed out"), _SOLR_OK)
+    with (
+        patch("scripts.solr_updater.loan_availability_updater.get_solr", return_value=solr),
+        pytest.raises(SolrWriteFailed, match="batch 2/3"),
+    ):
+        await solr_update_in_place(_marks(SOLR_WRITE_BATCH_THRESHOLD + 1))
+    assert solr.update_in_place_async.call_count == 2
 
 
 @pytest.mark.asyncio
