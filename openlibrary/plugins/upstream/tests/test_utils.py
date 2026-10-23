@@ -359,22 +359,18 @@ def test_get_language_name(add_languages):  # noqa: F811
     assert utils.get_language_name("/languages/ger", "fr") == "Deutsch"
 
 
-def test_get_lang_tag(add_languages):  # noqa: F811
-    # ISO 639-1 when the language record has one, else the MARC code
-    assert utils.get_lang_tag(["/languages/spa"], "Cien años de soledad") == "es"
-    assert utils.get_lang_tag(["fre"]) == "fre"
-    assert utils.get_lang_tag([{"key": "/languages/spa"}]) == "es"
-    assert utils.get_lang_tag([web.storage(key="/languages/spa")]) == "es"
+def test_get_text_screenreader_language(add_languages):  # noqa: F811
+    assert utils.get_text_screenreader_language("Cien años de soledad", ["spa"]) == "es"
+    assert utils.get_text_screenreader_language("Les Misérables", ["fre"]) == "fr"
+    assert utils.get_text_screenreader_language("Cien años de soledad", [{"key": "/languages/spa"}]) == "es"
     # Only a single declared language qualifies
-    assert utils.get_lang_tag([]) is None
-    assert utils.get_lang_tag(None) is None
-    assert utils.get_lang_tag(["eng", "fre"]) is None
-    assert utils.get_lang_tag(["und"]) is None
-    assert utils.get_lang_tag(["mul"]) is None
+    assert utils.get_text_screenreader_language("Faust", []) is None
+    assert utils.get_text_screenreader_language("Faust", ["eng", "fre"]) is None
+    assert utils.get_text_screenreader_language("Faust", ["und"]) is None
+    assert utils.get_text_screenreader_language("Faust", ["mul"]) is None
     # A romanized title in a non-Latin-script language keeps the page language
-    assert utils.get_lang_tag(["yid"], "Faust: a ṭrageyde in tsṿey ṭeyl") is None
-    assert utils.get_lang_tag(["yid"], "פאוסט") == "yid"
-    assert utils.get_lang_tag(["yid"]) == "yid"
+    assert utils.get_text_screenreader_language("Faust: a ṭrageyde in tsṿey ṭeyl", ["yid"]) is None
+    assert utils.get_text_screenreader_language("פאוסט", ["yid"]) == "yi"
 
 
 def test_json_encode():

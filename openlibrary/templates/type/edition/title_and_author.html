@@ -34,7 +34,7 @@ $ view_type = 'desktop' if for_desktop else 'mobile'
             $_("Book %s", primary_series.position)
         </div>
     $ book_title = edition.get('title', '') or (work.title if work else '')
-    $ title_lang = get_lang_tag(edition.languages, book_title) if edition else None
+    $ title_lang = get_text_screenreader_language(book_title, edition.languages) if edition else None
     <h1 class="work-title" itemprop="name" $:cond(title_lang, 'lang="%s"' % title_lang)>$book_title</h1>
 
     $if edition:

@@ -11,13 +11,13 @@ def add_languages(mock_site):
     convert_iso_to_marc.cache_clear()
 
     languages = [
-        ("eng", "English", {}),
-        ("fre", "French", {}),
+        ("eng", "English", {"identifiers": {"iso_639_1": ["en"]}}),
+        ("fre", "French", {"identifiers": {"iso_639_1": ["fr"]}}),
         ("fri", "Frisian", {}),
         ("fry", "Frisian", {}),
         ("ger", "Deutsch", {"name_translated": {"en": ["German"]}}),
         ("spa", "Spanish", {"identifiers": {"iso_639_1": ["es"]}}),
-        ("yid", "Yiddish", {}),
+        ("yid", "Yiddish", {"identifiers": {"iso_639_1": ["yi"]}}),
     ]
     for code, name, extras in languages:
         mock_site.save(

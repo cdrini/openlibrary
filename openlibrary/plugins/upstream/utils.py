@@ -53,6 +53,7 @@ from openlibrary.core.middleware import GZipMiddleware
 from openlibrary.utils import normalize_subject_name, request_context
 
 if TYPE_CHECKING:
+    from openlibrary.core.models import ThingReferenceDict
     from openlibrary.plugins.upstream.models import (
         Author,
         Edition,
@@ -1190,32 +1191,25 @@ def _is_latin_script(text: str) -> bool:
 
 
 @public
-def get_lang_tag(languages: Any, text: str | None = None) -> str | None:
+def get_text_screenreader_language(text: str, languages: list[str] | list[ThingReferenceDict]) -> str | None:
     """
     BCP 47 tag for an HTML ``lang`` attribute, or None when the text's language isn't certain.
 
-    ``languages`` is an edition's languages (Things, dicts, keys, or MARC codes). Only a single
+    ``languages`` is either MARC codes (e.g. from solr) or language references. Only a single
     declared language qualifies; multiple, "und"/"mul", or a romanized non-Latin title return None.
 
-    >>> get_lang_tag(["eng"])  # doctest: +SKIP
-    'en'
-    >>> get_lang_tag(["eng", "fre"]) is None
+    >>> get_text_screenreader_language("Faust", ["eng", "fre"]) is None
     True
     """
     if not languages or len(languages) != 1:
         return None
     lang = languages[0]
-    key = lang if isinstance(lang, str) else lang.get("key") or lang.get("code")
-    if not key:
-        return None
-    if not key.startswith("/languages/"):
-        key = f"/languages/{key}"
-    code = key.removeprefix("/languages/")
+    code = lang if isinstance(lang, str) else lang["key"].removeprefix("/languages/")
     if code in _NO_LANGUAGE_CODES:
         return None
-    if text and code in NON_LATIN_SCRIPT_LANGUAGES and _is_latin_script(text):
+    if code in NON_LATIN_SCRIPT_LANGUAGES and _is_latin_script(text):
         return None
-    thing = get_language(key)
+    thing = get_language(f"/languages/{code}")
     return (thing and safeget(lambda: thing["identifiers"]["iso_639_1"][0])) or code
 
 
