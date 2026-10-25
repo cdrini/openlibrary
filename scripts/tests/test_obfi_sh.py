@@ -57,3 +57,31 @@ class TestObfiMatchRange:
         end = iso_to_ms(end_iso)
         output = bash_w_obfi(f"cat {SAMPLE_LOG} | obfi_match_range {start} {end}")
         assert output.stdout == ""
+
+
+class TestObfiSkipUntil:
+    def test_skips_lines_before_timestamp(self):
+        start = iso_to_ms("2025-06-27T16:28:00Z")
+        output = bash_w_obfi(f"cat {SAMPLE_LOG} | obfi__skip_until {start}")
+        expected = "".join(SAMPLE_LOG.read_text().splitlines(keepends=True)[1:])
+        assert output.stdout == expected
+
+    def test_starts_after_gap(self):
+        # No lines in the log at 2025-06-27 12:00, so start from the next line after it
+        start = iso_to_ms("2025-06-27T12:00:00Z")
+        output = bash_w_obfi(f"cat {SAMPLE_LOG} | obfi__skip_until {start}")
+        expected = "".join(SAMPLE_LOG.read_text().splitlines(keepends=True)[1:])
+        assert output.stdout == expected
+
+    def test_keeps_out_of_order_lines_after_start(self):
+        # Once started, earlier lines are passed through for obfi_match_range to filter
+        start = iso_to_ms("2025-06-27T00:00:00Z")
+        lines = SAMPLE_LOG.read_text().splitlines(keepends=True)
+        log = "".join([lines[1], lines[0]])
+        output = bash_w_obfi(f"printf '%s' '{log}' | obfi__skip_until {start}")
+        assert output.stdout == log
+
+    def test_no_lines(self):
+        start = iso_to_ms("2030-01-01T00:00:00Z")
+        output = bash_w_obfi(f"cat {SAMPLE_LOG} | obfi__skip_until {start}")
+        assert output.stdout == ""

@@ -179,7 +179,10 @@ obfi_range() {
     START=$1
     END=$2
 
-    obfi_range_files $START $END | obfi_match_range $START $END
+    # Skip ahead from a minute early, since log lines can be slightly out of order
+    obfi_range_files $START $END \
+        | obfi__skip_until $((START - 60000)) \
+        | obfi_match_range $START $END
 }
 
 obfi_range_files() {
@@ -221,6 +224,35 @@ obfi_range_files() {
             cat "$FILE"
         fi
     done
+}
+
+obfi__skip_until() {
+    # Drops lines until the first one at or after the given timestamp (in ms), then
+    # passes everything through. A cheap pre-filter so obfi_match_range's slower
+    # python loop doesn't have to parse every line before the range.
+    # Works at minute granularity, so the timestamp is rounded down to the minute.
+    local key=$(date -u -d "@$(($1 / 1000))" +"%Y%m%d%H%M")
+
+    LC_ALL=C awk -v key="$key" '
+    BEGIN {
+        split("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec", months, " ")
+        for (i = 1; i <= 12; i++) month_num[months[i]] = sprintf("%02d", i)
+    }
+    found { print; next }
+    {
+        # Date is eg "[18/Mar/2025:11:20:36 +0000]"; only re-parse when the minute changes
+        minute = substr($0, index($0, " [") + 2, 17)
+        if (minute != last_minute) {
+            last_minute = minute
+            line_key = substr(minute, 8, 4) month_num[substr(minute, 4, 3)] \
+                substr(minute, 1, 2) substr(minute, 13, 2) substr(minute, 16, 2)
+            reached = length(line_key) == 12 && line_key >= key
+        }
+        if (reached) {
+            found = 1
+            print
+        }
+    }'
 }
 
 obfi_find_log() {
