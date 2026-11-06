@@ -48,6 +48,7 @@ class OpenLibraryEdition(OpenLibraryThing, total=False):
     works: list[dict]
     publishers: list[str]
     publish_places: list[str]
+    table_of_contents: list[str | dict]
 
 
 class OpenLibraryAuthor(OpenLibraryThing):
@@ -288,19 +289,6 @@ class DataProcessor:
                 "comment": e.get("comment", ""),
             }
 
-        def format_table_of_contents(toc):
-            # The core fields are always present, as clients may rely on them.
-            return [
-                {
-                    "level": entry.level,
-                    "label": entry.label or "",
-                    "title": entry.title or "",
-                    "pagenum": entry.pagenum or "",
-                    **entry.extra_fields,
-                }
-                for entry in TableOfContents.from_db(toc).entries
-            ]
-
         d = {
             "url": get_url(doc, self.base_url),
             "key": doc["key"],
@@ -337,7 +325,7 @@ class DataProcessor:
             "subject_times": get_subjects("subject_times", "time:"),
             "excerpts": [format_excerpt(e) for e in w.get("excerpts", [])],
             "notes": get_value(doc.get("notes", "")),
-            "table_of_contents": format_table_of_contents(doc.get("table_of_contents", [])),
+            "table_of_contents": TableOfContents.from_db(doc.get("table_of_contents", [])).to_db(),
             "links": [{"title": link.get("title"), "url": link["url"]} for link in w.get("links", "") if link.get("url")],
         }
 

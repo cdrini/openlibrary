@@ -551,13 +551,6 @@ class TestDataProcessor:
         ]
 
         assert dynlinks.DataProcessor().process_doc(doc)["table_of_contents"] == [
-            {"level": 0, "label": "", "title": "A plain string chapter", "pagenum": ""},
-            {
-                "level": 1,
-                "label": "",
-                "title": "The Red Thread",
-                "pagenum": "28",
-                "authors": [{"name": "Elizabeth Bear"}],
-                "subtitle": "A story",
-            },
+            {"level": 0, "title": "A plain string chapter"},
+            {"level": 1, "title": "The Red Thread", "pagenum": "28", "authors": [{"name": "Elizabeth Bear"}], "subtitle": "A story"},
         ]
