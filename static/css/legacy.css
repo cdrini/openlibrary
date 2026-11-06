@@ -1232,6 +1232,61 @@ div.excerpt .attribution {
   width: 10ch;
 }
 
+/* openlibrary/templates/books/edit/edition.html */
+.roles-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-stack-sm);
+  margin-bottom: var(--spacing-stack-sm);
+}
+.roles-form > *,
+.roles-form .floating-label {
+  display: flex;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+}
+/* stylelint-disable-next-line selector-max-specificity */
+.olform .roles-form .floating-label__input,
+.olform .roles-form select {
+  flex: 1;
+  box-sizing: border-box;
+  max-width: none;
+  margin: 0;
+}
+.roles-form .ac-input,
+.roles-form .floating-label {
+  flex: 1;
+}
+.roles-form__add {
+  justify-self: start;
+}
+#roles table.identifiers {
+  width: 100%;
+}
+@media all and (max-width: 959px) {
+  #roles table.identifiers tr.repeat-item {
+    display: flex;
+    gap: var(--spacing-inline-sm);
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+  #roles table.identifiers tr.repeat-item td {
+    border-bottom: none;
+  }
+  #roles table.identifiers tr.repeat-item td:nth-child(2) {
+    flex: 1;
+  }
+}
+@media all and (min-width: 960px) /* @width-breakpoint-desktop */ {
+  .roles-form {
+    grid-template-columns: auto 1fr 1fr auto;
+  }
+  /* Keep clear of the Languages column floated alongside */
+  #roles {
+    padding-right: var(--spacing-inline-xl);
+  }
+}
+
 /* openlibrary/templates/type/type/view.html */
 ul.booklinks li {
   font-size: var(--font-size-label-medium);

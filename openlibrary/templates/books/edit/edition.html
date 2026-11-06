@@ -200,38 +200,34 @@ $jsdef render_work_autocomplete_item(item):
                 </div>
                 <div class="input">
                     <div id="role-errors" class="note" style="display: none"></div>
-                    <table class="identifiers">
-                    <tbody>
-                        <tr id="roles-form">
-                            <td align="right">
-                                <select name="role" id="select-role" class="sansserif large">
-                                    <option value="" selected="selected">$_("Select role")</option>
-                                    $for role in edition_config.roles:
-                                        <option>$role</option>
+                    <div id="roles-form" class="roles-form">
+                        <select name="role" id="select-role" class="sansserif large">
+                            <option value="" selected="selected">$_("Select role")</option>
+                            $for role in edition_config.roles:
+                                <option>$role</option>
 
-                                    <!-- <option>---</option> -->
-                                    <!-- <option value="__add__">$_("Add a new role")</option> -->
-                                </select>
-                            </td>
-                            <td>
-                                <input type="text" id="role-name" name="name"/>
-                            </td>
-                            <td class="ac-input">
-                                <input type="text" id="role-author" class="ac-input__visible" placeholder="$_('Link to author (optional)')" aria-label="$_('Link to author (optional)')"/>
-                                <input type="hidden" id="role-author-key" class="ac-input__value" name="author"/>
-                            </td>
-                            <td>
-                                <button type="button" name="add" class="repeat-add larger">$_("Add")</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                    </table>
+                            <!-- <option>---</option> -->
+                            <!-- <option value="__add__">$_("Add a new role")</option> -->
+                        </select>
+                        <label class="floating-label">
+                            <span class="floating-label__text">$_('Name')</span>
+                            <input type="text" id="role-name" class="floating-label__input" name="name" placeholder="$_('Name')"/>
+                        </label>
+                        <div class="ac-input">
+                            <label class="floating-label">
+                                <span class="floating-label__text">$_('Link to author (optional)')</span>
+                                <input type="text" id="role-author" class="ac-input__visible floating-label__input" placeholder="$_('Link to author (optional)')"/>
+                            </label>
+                            <input type="hidden" id="role-author-key" class="ac-input__value" name="author"/>
+                        </div>
+                        <button type="button" name="add" class="repeat-add roles-form__add larger">$_("Add")</button>
+                    </div>
                     <table class="identifiers">
                         <tbody id="roles-display">
                             <tr id="roles-template" class="repeat-item" style="display: none;">
                                 <td align="right"><strong>{{role}}</strong></td>
                                 <td>{{name}}
-                                    <a class="contributor-author-link" href="{{author}}" target="_blank">{{author}}</a>
+                                    <a class="contributor-author-link" href="{{author}}" target="_blank">{{author.split('/').pop()}}</a>
                                     <input type="hidden" name="{{prefix}}contributors--{{index}}--role" value="{{role}}"/>
                                     <input type="hidden" name="{{prefix}}contributors--{{index}}--name" value="{{name}}"/>
                                     <input type="hidden" name="{{prefix}}contributors--{{index}}--author--key" value="{{author}}"/>
@@ -242,7 +238,7 @@ $jsdef render_work_autocomplete_item(item):
                             $for i, a in enumerate(work.get_authors()):
                                 <tr class="repeat-item">
                                     <td align="right"><strong>$_('Author')</strong></td>
-                                    <td>$a.name</td>
+                                    <td>$a.name <a class="contributor-author-link" href="$a.key" target="_blank">$a.key.split('/')[-1]</a></td>
                                     <td></td>
                                 </tr>
                             $for i, c in enumerate(book.contributors):
@@ -250,7 +246,7 @@ $jsdef render_work_autocomplete_item(item):
                                     <td align="right"><strong>$c.role</strong></td>
                                     <td>$c.name
                                         $if c.get('author'):
-                                            <a class="contributor-author-link" href="$c.author.key" target="_blank">$c.author.key</a>
+                                            <a class="contributor-author-link" href="$c.author.key" target="_blank">$c.author.key.split('/')[-1]</a>
                                             <input type="hidden" name="edition--contributors--${i}--author--key" value="$c.author.key"/>
                                         <input type="hidden" name="edition--contributors--${i}--role" value="$c.role"/>
                                         <input type="hidden" name="edition--contributors--${i}--name" value="$c.name"/>
