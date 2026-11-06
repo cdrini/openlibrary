@@ -289,13 +289,14 @@ class DataProcessor:
             }
 
         def format_table_of_contents(toc):
-            # This API has always published exactly these four fields.
+            # The core fields are always present, as clients may rely on them.
             return [
                 {
                     "level": entry.level,
                     "label": entry.label or "",
                     "title": entry.title or "",
                     "pagenum": entry.pagenum or "",
+                    **entry.extra_fields,
                 }
                 for entry in TableOfContents.from_db(toc).entries
             ]

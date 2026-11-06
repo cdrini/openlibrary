@@ -542,3 +542,22 @@ class TestDataProcessor:
         doc["preview"] = "full"
 
         assert p.process_doc(doc) == data9["result"]["data"]
+
+    def test_process_doc_table_of_contents(self):
+        doc = build_data0()["/books/OL0M"]
+        doc["table_of_contents"] = [
+            "A plain string chapter",
+            {"level": 1, "title": "The Red Thread", "pagenum": "28", "authors": [{"name": "Elizabeth Bear"}], "subtitle": "A story"},
+        ]
+
+        assert dynlinks.DataProcessor().process_doc(doc)["table_of_contents"] == [
+            {"level": 0, "label": "", "title": "A plain string chapter", "pagenum": ""},
+            {
+                "level": 1,
+                "label": "",
+                "title": "The Red Thread",
+                "pagenum": "28",
+                "authors": [{"name": "Elizabeth Bear"}],
+                "subtitle": "A story",
+            },
+        ]
