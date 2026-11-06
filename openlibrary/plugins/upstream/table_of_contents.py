@@ -5,6 +5,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Required, TypedDict, TypeVar
 
 from infogami.infobase.client import Nothing, Thing
+from infogami.infobase.utils import safeint
 
 if TYPE_CHECKING:
     from openlibrary.core.models import ThingReferenceDict
@@ -16,7 +17,7 @@ class TableOfContents:
 
     @cached_property
     def min_level(self) -> int:
-        return min(e.level for e in self.entries)
+        return min((e.level for e in self.entries), default=0)
 
     def is_complex(self) -> bool:
         return any(e.extra_fields for e in self.entries)
@@ -28,9 +29,13 @@ class TableOfContents:
         def row(r: dict | str) -> TocEntry:
             if isinstance(r, str):
                 # Legacy, can be just a plain string
-                return TocEntry(level=0, title=r)
-            else:
+                return TocEntry(level=0, title=r or None)
+            elif hasattr(r, "get"):
+                # A dict, or an infogami Thing, which is not one but quacks like one
                 return TocEntry.from_dict(r)
+            else:
+                # Legacy, anything else is unusable; dropped as an empty entry
+                return TocEntry(level=0)
 
         return TableOfContents([toc_entry for r in db_table_of_contents if not (toc_entry := row(r)).is_empty()])
 
@@ -74,9 +79,11 @@ class TocEntry:
     @staticmethod
     def from_dict(d: dict) -> TocEntry:
         return TocEntry(
-            level=d.get("level", 0),
+            # Legacy rows can carry level as a string, or hold the title in a
+            # /type/text "value" rather than a "title".
+            level=safeint(d.get("level", 0), 0),
             label=d.get("label"),
-            title=d.get("title"),
+            title=d.get("title") or d.get("value"),
             pagenum=d.get("pagenum"),
             authors=d.get("authors"),
             subtitle=d.get("subtitle"),

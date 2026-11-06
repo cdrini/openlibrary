@@ -7,6 +7,7 @@ import requests
 
 import openlibrary.book_providers as bp
 from openlibrary.edition_scorecard import EditionScorecard, EditionScorecardEvaluator
+from openlibrary.plugins.upstream.table_of_contents import TableOfContents
 from openlibrary.solr.solr_types import SolrDocument
 from openlibrary.solr.updater.abstract import AbstractSolrBuilder, AbstractSolrUpdater
 from openlibrary.solr.utils import SolrUpdateRequest, get_solr_base_url
@@ -180,19 +181,15 @@ class EditionSolrBuilder(AbstractSolrBuilder):
     def chapter(self) -> list[str]:
         result = []
         olid = self._edition.get("key", "").split("/", 2)[-1]
-        for chapter in self._edition.get("table_of_contents", []):
-            # Check if plain string first
-            if isinstance(chapter, str):
-                result.append(f"{olid} | {chapter}")
-                continue
+        toc = TableOfContents.from_db(self._edition.get("table_of_contents", []))
+        for chapter in toc.entries:
+            title = chapter.title or ""
+            if chapter.subtitle:
+                title += f": {chapter.subtitle}"
+            if chapter.authors:
+                title += f" ({', '.join(a['name'] for a in chapter.authors)})"
 
-            title = chapter.get("title", "")
-            if chapter.get("subtitle"):
-                title += f": {chapter['subtitle']}"
-            if chapter.get("authors"):
-                title += f" ({', '.join(a['name'] for a in chapter['authors'])})"
-
-            result.append(f"{olid} | {chapter.get('label', '')} | {title} | {chapter.get('pagenum', '')}")
+            result.append(f"{olid} | {chapter.label or ''} | {title} | {chapter.pagenum or ''}")
         return result
 
     @cached_property

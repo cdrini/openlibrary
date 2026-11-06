@@ -139,22 +139,22 @@ class TestBasicMergeEngine:
 def test_get_many():
     web.ctx.site = MockSite()
     site.set(web.ctx.site)
-    # get_many should handle bad table_of_contents in the edition.
+    # Infobase only validates properties a save changes, so a merge must pass
+    # table_of_contents through untouched, legacy rows and extra fields included.
     edition = {
         "key": "/books/OL1M",
         "type": {"key": "/type/edition"},
-        "table_of_contents": [{"type": "/type/text", "value": "foo"}],
+        "table_of_contents": [
+            {"type": "/type/text", "value": "foo"},
+            {"level": 0, "title": "bar", "authors": [{"name": "Alice Author"}], "subtitle": "A beginning"},
+        ],
     }
     type_edition = {"key": "/type/edition", "type": {"key": "/type/type"}}
     web.ctx.site.add([edition, type_edition])
 
     assert web.ctx.site.get("/books/OL1M").type.key == "/type/edition"
 
-    assert get_many(["/books/OL1M"])[0] == {
-        "key": "/books/OL1M",
-        "type": {"key": "/type/edition"},
-        "table_of_contents": [{"label": "", "level": 0, "pagenum": "", "title": "foo"}],
-    }
+    assert get_many(["/books/OL1M"])[0] == edition
 
 
 class TestAuthorRedirectEngine:

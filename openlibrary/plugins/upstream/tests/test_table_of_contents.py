@@ -43,6 +43,55 @@ class TestTableOfContents:
             TocEntry(level=0, title="Chapter 2"),
         ]
 
+    def test_from_db_legacy_text_rows(self):
+        """Old imports stored rows as a /type/text value rather than a toc_item."""
+        db_table_of_contents = [
+            {"type": "/type/text", "value": "Chapter 1"},
+            {"type": {"key": "/type/toc_item"}, "value": "Chapter 2"},
+        ]
+
+        toc = TableOfContents.from_db(db_table_of_contents)
+
+        assert toc.entries == [
+            TocEntry(level=0, title="Chapter 1"),
+            TocEntry(level=0, title="Chapter 2"),
+        ]
+
+    def test_from_db_coerces_level(self):
+        db_table_of_contents = [
+            {"level": "2", "title": "Chapter 1"},
+            {"level": "II", "title": "Chapter 2"},
+        ]
+
+        toc = TableOfContents.from_db(db_table_of_contents)
+
+        assert toc.entries == [
+            TocEntry(level=2, title="Chapter 1"),
+            TocEntry(level=0, title="Chapter 2"),
+        ]
+
+    def test_from_db_thing_rows(self):
+        """Rows reached via an Edition are infogami Things, not dicts."""
+
+        class ThingLike:
+            def __init__(self, d):
+                self._d = d
+
+            def get(self, key, default=None):
+                return self._d.get(key, default)
+
+        db_table_of_contents = [ThingLike({"level": 1, "title": "Chapter 1", "pagenum": "3"})]
+
+        assert TableOfContents.from_db(db_table_of_contents).entries == [TocEntry(level=1, title="Chapter 1", pagenum="3")]
+
+    def test_from_db_drops_unusable_rows(self):
+        db_table_of_contents = ["", {}, 42, {"class": "section", "type": {"key": "/type/toc_item"}}]
+
+        assert TableOfContents.from_db(db_table_of_contents).entries == []
+
+    def test_min_level_without_entries(self):
+        assert TableOfContents([]).min_level == 0
+
     def test_to_db(self):
         toc = TableOfContents(
             [

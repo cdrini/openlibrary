@@ -42,6 +42,27 @@ def test_sort_title(title, subtitle, expected):
 
 
 class TestEditionSolrBuilder:
+    def test_chapter(self):
+        edition = make_edition(
+            key="/books/OL1M",
+            table_of_contents=[
+                {"level": 1, "label": "Chapter 1", "title": "Beginnings", "pagenum": "3"},
+                {"level": 1, "title": "Middles", "subtitle": "The muddle", "authors": [{"name": "Alice Author"}]},
+                # Legacy shapes that predate /type/toc_item
+                "A plain string chapter",
+                {"type": "/type/text", "value": "A /type/text chapter"},
+                {"level": "2", "title": "A chapter with a string level"},
+            ],
+        )
+
+        assert EditionSolrBuilder(edition, solr_work={}, db_work=None, db_authors=[]).chapter == [
+            "OL1M | Chapter 1 | Beginnings | 3",
+            "OL1M |  | Middles: The muddle (Alice Author) | ",
+            "OL1M |  | A plain string chapter | ",
+            "OL1M |  | A /type/text chapter | ",
+            "OL1M |  | A chapter with a string level | ",
+        ]
+
     def test_identifiers(self):
         edition = make_edition(
             identifiers={
