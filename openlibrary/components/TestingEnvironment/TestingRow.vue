@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, nextTick, useTemplateRef } from 'vue';
 import PersonCell from './PersonCell.vue';
 import { REPO_URL, canUpdate, driftPill, effectiveActive, sprintf } from './utils.js';
 
@@ -25,10 +25,37 @@ const props = defineProps({
     updating: {
         type: Boolean,
         default: false
+    },
+    dragging: {
+        type: Boolean,
+        default: false
     }
 });
 
-const emit = defineEmits(['toggle', 'update', 'remove', 'restore']);
+const emit = defineEmits(['toggle', 'update', 'remove', 'restore', 'drag-start', 'drag-end', 'move']);
+
+const handle = useTemplateRef('handle');
+
+// The handle is the drag source, but the whole row is what should follow the
+// pointer, so it becomes the drag image.
+function onDragStart(event) {
+    const row = event.currentTarget.closest('tr');
+    event.dataTransfer.effectAllowed = 'move';
+    // Firefox starts no drag without data.
+    event.dataTransfer.setData('text/plain', String(props.pr.pr));
+    if (row) event.dataTransfer.setDragImage(row, 16, row.offsetHeight / 2);
+    emit('drag-start', props.pr);
+}
+
+// Keyboard alternative to dragging. Moving the row re-inserts its DOM node,
+// which drops focus, so the handle takes it back.
+function onHandleKey(event) {
+    const delta = { ArrowUp: -1, ArrowDown: 1 }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    emit('move', props.pr, delta);
+    nextTick(() => handle.value?.focus());
+}
 
 const inSet = computed(() => props.pr.in_set !== false);
 
@@ -68,7 +95,30 @@ function text(key, ...args) {
 </script>
 
 <template>
-    <tr class="testing-env__row" :class="{ 'testing-env__row--recent': recent }">
+    <tr class="testing-env__row" :class="{ 'testing-env__row--recent': recent, 'testing-env__row--dragging': dragging }">
+        <td v-if="maintainer" class="testing-env__col-handle">
+            <button
+                v-if="inSet"
+                ref="handle"
+                type="button"
+                class="testing-env__handle"
+                draggable="true"
+                :title="strings.reorder"
+                :aria-label="text('reorderPr', pr.pr)"
+                @dragstart="onDragStart"
+                @dragend="emit('drag-end')"
+                @keydown="onHandleKey"
+            >
+                <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+                    <circle cx="2.5" cy="3" r="1.5" />
+                    <circle cx="7.5" cy="3" r="1.5" />
+                    <circle cx="2.5" cy="8" r="1.5" />
+                    <circle cx="7.5" cy="8" r="1.5" />
+                    <circle cx="2.5" cy="13" r="1.5" />
+                    <circle cx="7.5" cy="13" r="1.5" />
+                </svg>
+            </button>
+        </td>
         <td v-if="maintainer" class="testing-env__col-toggle">
             <button
                 v-if="inSet && !removalStaged"

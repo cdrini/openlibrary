@@ -7746,6 +7746,23 @@ msgid "Disable"
 msgstr ""
 
 #: TestingEnvironment.html.jinja
+msgid "Move"
+msgstr ""
+
+#: TestingEnvironment.html.jinja
+msgid "Merge order"
+msgstr ""
+
+#: TestingEnvironment.html.jinja
+msgid "Drag to change the merge order"
+msgstr ""
+
+#: TestingEnvironment.html.jinja
+#, python-format
+msgid "Reorder PR %(num)s; use the up and down arrow keys"
+msgstr ""
+
+#: TestingEnvironment.html.jinja
 msgid "Restore"
 msgstr ""
 

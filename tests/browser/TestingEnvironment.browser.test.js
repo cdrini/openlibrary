@@ -6,7 +6,7 @@
  * without mocking the custom elements.
  */
 import { expect, test } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-vue';
 import TestingEnvironment from '../../openlibrary/components/TestingEnvironment.vue';
 import '../../openlibrary/components/lit/OlIcon.js';
@@ -526,4 +526,56 @@ test('a push dropped mid-queue still converges via the last response', async () 
     } finally {
         window.EventSource = realEventSource;
     }
+});
+
+function stubReorder() {
+    const bodies = [];
+    window.fetch = async (url, options = {}) => {
+        if (options.method === 'PUT') {
+            const { prs } = JSON.parse(options.body);
+            bodies.push(prs);
+            return { ok: true, json: async () => ({ ok: true, prs: prs.map(pr => ({ pr, pending_active: null, pending_remove: false })) }) };
+        }
+        // A copy: reordering sorts the payload's rows in place.
+        return { ok: true, json: async () => structuredClone(updatePayload) };
+    };
+    return bodies;
+}
+
+const rowOrder = () => Array.from(document.querySelectorAll('.testing-env__pr-num')).map(link => Number(link.textContent.slice(1)));
+
+test('rows keep the merge order the server lists them in', async () => {
+    const reversed = { ...updatePayload, prs: [...updatePayload.prs].reverse() };
+    window.fetch = async () => ({ ok: true, json: async () => reversed });
+
+    await render(TestingEnvironment, { props: { maintainer: 'true' } });
+
+    await expect.poll(rowOrder).toEqual([13271, 13270, 13269]);
+});
+
+test('arrow keys on the handle move a row and save the order', async () => {
+    const bodies = stubReorder();
+    await render(TestingEnvironment, { props: { maintainer: 'true' } });
+
+    const handle = page.getByRole('button', { name: /^Reorder PR 13269/ });
+    await expect.element(handle).toBeInTheDocument();
+    await handle.click();
+    await userEvent.keyboard('{ArrowDown}');
+
+    await expect.poll(rowOrder).toEqual([13270, 13269, 13271]);
+    await expect.poll(() => bodies).toEqual([[13270, 13269, 13271]]);
+    // The handle keeps focus, so the row can keep moving.
+    await expect.poll(() => document.activeElement?.getAttribute('aria-label')).toMatch(/^Reorder PR 13269/);
+});
+
+test('dragging a row by its handle reorders it', async () => {
+    const bodies = stubReorder();
+    await render(TestingEnvironment, { props: { maintainer: 'true' } });
+
+    const handle = page.getByRole('button', { name: /^Reorder PR 13271/ });
+    await expect.element(handle).toBeInTheDocument();
+    await userEvent.dragAndDrop(handle, page.getByRole('link', { name: 'First PR' }));
+
+    await expect.poll(rowOrder).toEqual([13271, 13269, 13270]);
+    await expect.poll(() => bodies).toEqual([[13271, 13269, 13270]]);
 });

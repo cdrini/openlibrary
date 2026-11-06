@@ -44,6 +44,7 @@ const CHANGE_LABELS = {
     pin: 'updatePin',
     enable: 'enable',
     disable: 'disable',
+    move: 'move',
     remove: 'remove'
 };
 

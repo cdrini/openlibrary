@@ -29,6 +29,7 @@ from openlibrary.plugins.openlibrary.status import (
     deploy_testing_status,
     pull_latest_prs,
     remove_testing_prs,
+    reorder_prs,
     restore_prs,
     set_prs_active,
 )
@@ -139,6 +140,14 @@ async def pull_latest(data: PRsRequest) -> dict[str, bool]:
 def set_prs_active_endpoint(data: ActivePRsRequest) -> dict[str, Any]:
     """Stage PRs to be enabled or disabled on the next testing deploy."""
     result = set_prs_active(data.prs, data.active)
+    _invalidate_cached_snapshot()
+    return result
+
+
+@router.put("/status/testing/order")
+def reorder_prs_endpoint(data: PRsRequest) -> dict[str, Any]:
+    """Set the order the next testing deploy merges PRs in."""
+    result = reorder_prs(data.prs)
     _invalidate_cached_snapshot()
     return result
 

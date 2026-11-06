@@ -40,7 +40,7 @@ TESTING_STATE_FILE = Path("./_testing-prs.json")
 # running. After this long we stop claiming it is, without claiming it worked.
 _DEPLOY_WINDOW = 10 * 60  # 10 minutes
 # Reading order for the pending-change plan: additions first, removals last.
-_CHANGE_ORDER = {"add": 0, "pin": 1, "enable": 2, "disable": 3, "remove": 4}
+_CHANGE_ORDER = {"add": 0, "pin": 1, "enable": 2, "disable": 3, "move": 4, "remove": 5}
 
 
 class status(delegate.page):
@@ -119,6 +119,44 @@ def set_prs_active(prs: list[int], active: bool) -> dict[str, Any]:
             p.pending_active = active
     _save_testing_state(state)
     return {"ok": True, "prs": _staged_rows(state)}
+
+
+def reorder_prs(prs: list[int]) -> dict[str, Any]:
+    """Reorder the testing set, which is the order the deploy merges PRs in.
+
+    ``prs`` is the new relative order of the PRs it names: they are written
+    back into the slots those PRs already occupy, so rows it omits (hidden
+    in the panel, or added by someone else meanwhile) keep their positions.
+    Unknown and repeated numbers are ignored.
+    """
+    state = _load_testing_state()
+    if not state:
+        return {"ok": True, "prs": []}
+    by_pr = {p.pr: p for p in state.prs}
+    order = [by_pr[pr] for pr in dict.fromkeys(prs) if pr in by_pr]
+    named = {p.pr for p in order}
+    slots = iter(order)
+    state.prs = [next(slots) if p.pr in named else p for p in state.prs]
+    _save_testing_state(state)
+    return {"ok": True, "prs": _staged_rows(state)}
+
+
+def _moved_prs(previous: list[int], current: list[int]) -> set[int]:
+    """The fewest PRs whose moves turn ``previous`` into ``current``.
+
+    Only PRs in both lists count. Everything outside a longest common
+    subsequence moved, so dragging one row past others flags just that row.
+    """
+    in_both = set(previous) & set(current)
+    rank = {pr: i for i, pr in enumerate(pr for pr in previous if pr in in_both)}
+    seq = [pr for pr in current if pr in in_both]
+    # O(n²) longest increasing subsequence of ranks; the set is a handful of PRs.
+    best: list[list[int]] = []
+    for i, pr in enumerate(seq):
+        prefixes = [best[j] for j in range(i) if rank[seq[j]] < rank[pr]]
+        best.append([*max(prefixes, key=len), pr] if prefixes else [pr])
+    longest: list[int] = max(best, key=len) if best else []
+    return in_both - set(longest)
 
 
 def _staged_rows(state: TestingState) -> list[dict[str, Any]]:
@@ -275,6 +313,14 @@ def _pending_changes(state: TestingState, drift_info: dict) -> list[PendingChang
     for pr, title in state.deployed.items():
         if pr not in remaining:
             changes.append(PendingChange(pr=pr, title=title, kind="remove", reason="dropped", detail=""))
+    # ``deployed`` keeps the merge order of the last deploy, so a PR the deploy
+    # would now merge at a different point among the others is a change too.
+    staying = [p for p in state.prs if not p.pending_remove and not _drop_reason(drift_info.get(p.pr, {}))]
+    next_order = [p.pr for p in staying if (p.pending_toggle if p.pending_toggle is not None else p.active)]
+    moved = _moved_prs(list(state.deployed), next_order)
+    for p in staying:
+        if p.pr in moved:
+            changes.append(PendingChange(pr=p.pr, title=p.title, kind="move", detail=""))
     changes.sort(key=lambda c: (_CHANGE_ORDER[c.kind], c.pr))
     return changes
 
@@ -453,7 +499,7 @@ class TestingPRStatus(TestingPR):
     live_now: bool = False  # the last deploy put this PR on the box
     merge_conflict: bool = False  # the last deploy's merge of this PR conflicted, so it did not land
     closed: bool = False  # the PR was closed on GitHub without being merged; the next deploy drops it
-    action: str = ""  # what the next deploy does with this row: add, pin, enable, disable, remove, or empty
+    action: str = ""  # what the next deploy does with this row: add, pin, enable, disable, move, remove, or empty
     in_set: bool = True  # False for rows dropped from the set but still on the box
 
 
@@ -462,7 +508,7 @@ class PendingChange(BaseModel):
 
     pr: int
     title: str
-    kind: str  # add, pin, enable, disable, remove
+    kind: str  # add, pin, enable, disable, move, remove
     detail: str = ""  # short SHA for add/pin changes; empty otherwise
     reason: str = ""  # why a removal is staged: merged, closed, or dropped; empty otherwise
 
@@ -490,8 +536,8 @@ def build_testing_status(state: TestingState, drift_info: dict, merge_conflicts:
     """Compose the testing-environment status from persisted state and live drift info. Pure.
 
     Rows carry the live drift flags plus the derived per-row ``action`` and
-    ``live_now`` the panel renders; rows dropped from the set but still on the
-    box (``in_set=False``) are included so the table shows the full
+    ``live_now`` the panel renders, in the order the deploy merges them; rows
+    dropped from the set but still on the box (``in_set=False``) follow them so the table shows the full
     before/after picture. The plan (``pending_changes``) and deploy state are
     derived the same way the deploy handler applies them, so the table, the
     plan, and the JSON API can't drift apart.
@@ -553,7 +599,6 @@ def build_testing_status(state: TestingState, drift_info: dict, merge_conflicts:
                     in_set=False,
                 )
             )
-    prs.sort(key=lambda row: row.pr)
     return TestingStatus(
         last_deploy_at=last_deploy,
         deployed_by=state.deployed_by,

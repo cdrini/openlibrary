@@ -46,20 +46,88 @@ const { setToast } = useToast();
 // it drains, and the drain-end response confirms everything queued.
 const busy = shallowRef(false);
 const { view, payload, now, retry } = useTestingStatus(busy);
-const { refreshing, adding, deploying, updating, addInput, recentlyAdded, togglePr, updatePr, removePr, restorePr, deploy, refresh, addPrs } = useActions({
-    busy,
-    payload,
-    setToast,
-    strings
-});
+const { refreshing, adding, deploying, updating, addInput, recentlyAdded, togglePr, updatePr, removePr, restorePr, reorderPrs, deploy, refresh, addPrs } =
+    useActions({
+        busy,
+        payload,
+        setToast,
+        strings
+    });
 
 // ── Derived state ───────────────────────────────────────────────────
 const isMaintainer = computed(() => props.maintainer === 'true');
 
-const prs = computed(() => {
+const visiblePrs = computed(() => {
     // Merged PRs land in the next deploy regardless; the row is noise.
     return ((payload.value && payload.value.prs) || []).filter(pr => pr.merged !== true);
 });
+
+// ── Reordering ──────────────────────────────────────────────────────
+// The server lists rows in merge order. Mid-drag, the table follows a local
+// order instead, so a pushed snapshot can't yank rows out from under the
+// pointer; dropping commits it, and anything else (Escape, a drop outside the
+// table) leaves the server's order standing.
+const draggedPr = shallowRef(null);
+const dragOrder = shallowRef(null);
+
+const prs = computed(() => {
+    const order = dragOrder.value;
+    if (!order) return visiblePrs.value;
+    const rank = new Map(order.map((pr, i) => [pr, i]));
+    // Rows outside the order (dropped from the set) stay last.
+    return [...visiblePrs.value].sort((a, b) => (rank.get(a.pr) ?? Infinity) - (rank.get(b.pr) ?? Infinity));
+});
+
+function inSetOrder() {
+    return visiblePrs.value.filter(pr => pr.in_set !== false).map(pr => pr.pr);
+}
+
+function onDragStart(pr) {
+    draggedPr.value = pr.pr;
+    dragOrder.value = inSetOrder();
+}
+
+function onDragOver(target, event) {
+    const dragged = draggedPr.value;
+    if (dragged === null || target.in_set === false) return;
+    // Accepting the dragover is what makes the row a drop target.
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    if (target.pr === dragged) return;
+    const order = dragOrder.value.filter(pr => pr !== dragged);
+    const from = dragOrder.value.indexOf(dragged);
+    const to = dragOrder.value.indexOf(target.pr);
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pastMiddle = event.clientY > rect.top + rect.height / 2;
+    // Swap only once the pointer crosses the target's middle, in the
+    // direction of travel, so the rows don't flip back and forth.
+    if (from < to ? !pastMiddle : pastMiddle) return;
+    order.splice(order.indexOf(target.pr) + (from < to ? 1 : 0), 0, dragged);
+    dragOrder.value = order;
+}
+
+function onDrop(event) {
+    if (draggedPr.value === null) return;
+    event.preventDefault();
+    const order = dragOrder.value;
+    if (order.join() !== inSetOrder().join()) reorderPrs(order);
+    onDragEnd();
+}
+
+function onDragEnd() {
+    draggedPr.value = null;
+    dragOrder.value = null;
+}
+
+function moveBy(pr, delta) {
+    const order = inSetOrder();
+    const from = order.indexOf(pr.pr);
+    const to = from + delta;
+    if (from === -1 || to < 0 || to >= order.length) return;
+    order.splice(from, 1);
+    order.splice(to, 0, pr.pr);
+    reorderPrs(order);
+}
 
 // ── Deploy favicon badge ────────────────────────────────────────────
 let deployBadge = null;
@@ -114,6 +182,9 @@ onBeforeUnmount(() => syncDeployFavicon(false));
                     <table class="testing-env__table">
                         <thead>
                             <tr>
+                                <th v-if="isMaintainer" scope="col" class="testing-env__col-handle">
+                                    <span class="sr-only">{{ strings.order }}</span>
+                                </th>
                                 <th v-if="isMaintainer" scope="col">
                                     {{ strings.next }}
                                 </th>
@@ -143,10 +214,16 @@ onBeforeUnmount(() => syncDeployFavicon(false));
                                 :strings="strings"
                                 :recent="recentlyAdded.has(pr.pr)"
                                 :updating="updating.has(pr.pr)"
+                                :dragging="draggedPr === pr.pr"
                                 @toggle="togglePr"
                                 @update="updatePr"
                                 @remove="removePr"
                                 @restore="restorePr"
+                                @drag-start="onDragStart"
+                                @drag-end="onDragEnd"
+                                @move="moveBy"
+                                @dragover="onDragOver(pr, $event)"
+                                @drop="onDrop"
                             />
                         </tbody>
                     </table>

@@ -6,7 +6,7 @@ import { actionErrorMessage, effectiveActive, parsePrNumbers, postAction } from 
 const RECENT_HIGHLIGHT_MS = 10000;
 
 /**
- * PR toggle, update, remove, restore, deploy, refresh, and add actions.
+ * PR toggle, update, remove, restore, reorder, deploy, refresh, and add actions.
  *
  * Clicks flip their row instantly; the queue sends POSTs in order and the
  * last response of a drain carries the staged flags, which are copied over
@@ -104,9 +104,10 @@ export function useActions({ busy, payload, setToast, strings }) {
     // ── Optimistic rows, confirmed at drain end ───────────────────────
     // Copy the staged flags from a mutation response over our rows, and drop
     // rows the server removed outright (never-deployed deletes have nothing
-    // to stage — without this they linger with a dead undo button). Merges
-    // flags only otherwise — never adds rows — so a partial or empty
-    // response is always safe to apply or skip.
+    // to stage — without this they linger with a dead undo button). The
+    // response lists rows in merge order, so ours take that order too. Merges
+    // flags and order only otherwise — never adds rows — so a partial or
+    // empty response is always safe to apply or skip.
     function applyConfirmedState(result) {
         const current = payload?.value?.prs;
         if (!Array.isArray(current)) return;
@@ -123,6 +124,17 @@ export function useActions({ busy, payload, setToast, strings }) {
                 row.pending_remove = update.pending_remove ?? false;
             }
         }
+        sortRows(rows.map(r => r.pr));
+    }
+
+    // Put rows in the given PR order; rows it doesn't name keep their
+    // relative order after it. Array.sort is stable.
+    function sortRows(order) {
+        const current = payload?.value?.prs;
+        if (!Array.isArray(current)) return;
+        const rank = new Map(order.map((pr, i) => [pr, i]));
+        const sorted = [...current].sort((a, b) => (rank.get(a.pr) ?? Infinity) - (rank.get(b.pr) ?? Infinity));
+        current.splice(0, current.length, ...sorted);
     }
 
     // Flip a row instantly and send the action; a rejected send restores the
@@ -169,6 +181,18 @@ export function useActions({ busy, payload, setToast, strings }) {
     // pinned commit and toggle state come back untouched.
     function restorePr(pr) {
         return optimisticRow(pr.pr, { pending_remove: false }, '/status/restore', { prs: [pr.pr] });
+    }
+
+    // Set the merge order: the rows move at once, and a rejected save puts
+    // them back.
+    function reorderPrs(order) {
+        const snapshot = (payload?.value?.prs ?? []).map(r => r.pr);
+        sortRows(order);
+        const waiter = enqueue('/status/testing/order', { prs: order }, 'action', 'PUT');
+        waiter.then(result => {
+            if (result === false || result?.ok === false) sortRows(snapshot);
+        });
+        return waiter;
     }
 
     async function deploy() {
@@ -228,6 +252,7 @@ export function useActions({ busy, payload, setToast, strings }) {
         updatePr,
         removePr,
         restorePr,
+        reorderPrs,
         deploy,
         refresh,
         addPrs

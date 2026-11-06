@@ -267,6 +267,7 @@
 }
 
 /* Every column but the PR title is content-sized; the title takes the slack. */
+.testing-env__col-handle,
 .testing-env__col-toggle,
 .testing-env__col-actions,
 .testing-env__drift-cell {
@@ -277,6 +278,42 @@
 /* The toggle header is the widest content, so the cell centres the switch. */
 .testing-env__col-toggle {
   text-align: center;
+}
+
+/* Hugs the table edge: the handle is a narrow grip, not a full cell. */
+.testing-env__table .testing-env__col-handle {
+  padding-right: 0;
+}
+
+/* Grip for dragging a row to a new merge position. Quiet until hovered, so
+   the table doesn't read as a column of buttons. */
+.testing-env__handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--border-radius-button);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: grab;
+  opacity: 0.6;
+}
+
+.testing-env__handle:active {
+  cursor: grabbing;
+}
+
+.testing-env__handle:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus-ring);
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+.testing-env__row:hover .testing-env__handle {
+  opacity: 1;
 }
 
 /* Trailing verb column: ragged-right. */
@@ -499,6 +536,11 @@ a.testing-env__pill:focus-visible {
   transition: background var(--duration-base) var(--ease-state);
 }
 
+/* The row being dragged: a placeholder at the slot it would drop into. */
+.testing-env__row--dragging > td {
+  opacity: 0.4;
+}
+
 /* Last of the row backgrounds: pointer feedback beats every state tint. */
 .testing-env__row:hover td {
   background: var(--color-control-hover);
@@ -686,6 +728,10 @@ a.testing-env__pill:focus-visible {
 
 .testing-env__change--pin .testing-env__change-kind {
   color: var(--color-warning-fg);
+}
+
+.testing-env__change--move .testing-env__change-kind {
+  color: var(--color-link);
 }
 
 .testing-env__change--remove .testing-env__change-kind {

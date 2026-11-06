@@ -600,6 +600,95 @@ def test_payload_includes_dropped_prs_as_readonly_rows():
     assert dropped.drift == -1
 
 
+def test_payload_lists_rows_in_merge_order():
+    """Rows follow the state's order, which is the order the deploy merges them."""
+    prs = [_make_pr(pr_number=n, added_at="2026-08-01T10:00:00+00:00") for n in (13300, 13100, 13200)]
+    state = _make_state(prs=prs)
+    state.deployed = {13300: "x", 13100: "x", 13200: "x", 13000: "Old PR"}
+
+    result = status_module.build_testing_status(state, {})
+
+    assert [p.pr for p in result.prs] == [13300, 13100, 13200, 13000]  # dropped rows last
+
+
+@pytest.mark.parametrize(
+    ("previous", "current", "expected"),
+    [
+        ([1, 2, 3], [1, 2, 3], set()),
+        ([1, 2, 3, 4], [1, 3, 4, 2], {2}),  # one row dragged down
+        ([1, 2, 3, 4], [4, 1, 2, 3], {4}),  # one row dragged to the top
+        ([1, 2], [2, 1], {1}),  # a swap flags just one of the pair
+        ([1, 2, 3], [3, 5, 1], {1}),  # rows on only one side don't count
+        ([], [1, 2], set()),
+    ],
+)
+def test_moved_prs_flags_the_fewest_moves(previous, current, expected):
+    assert status_module._moved_prs(previous, current) == expected
+
+
+def test_pending_changes_reports_a_reorder_as_a_move():
+    prs = [_make_pr(pr_number=n, added_at="2026-08-01T10:00:00+00:00") for n in (13100, 13300, 13200)]
+    state = _make_state(prs=prs)
+    state.deployed = {13100: "x", 13200: "x", 13300: "x"}
+
+    changes = status_module._pending_changes(state, {})
+
+    assert [(c.kind, c.pr) for c in changes] == [("move", 13200)]
+    assert status_module.build_testing_status(state, {}).has_pending is True
+
+
+def test_pending_changes_ignores_order_of_rows_leaving_or_joining():
+    """A removal or an add shifts neighbours' indexes but moves nothing."""
+    kept = [_make_pr(pr_number=n, added_at="2026-08-01T10:00:00+00:00") for n in (13100, 13300)]
+    gone = _make_pr(pr_number=13200, added_at="2026-08-01T10:00:00+00:00")
+    gone.pending_remove = True
+    new = _make_pr(pr_number=13050)  # added after the last deploy
+    state = _make_state(prs=[new, kept[0], gone, kept[1]])
+    state.deployed = {13100: "x", 13200: "x", 13300: "x"}
+
+    changes = status_module._pending_changes(state, {})
+
+    assert sorted(c.kind for c in changes) == ["add", "remove"]
+
+
+def test_reorder_rewrites_only_the_named_slots():
+    """Rows the request omits (hidden merged rows, concurrent adds) stay put."""
+    prs = [_make_pr(pr_number=n) for n in (13100, 13200, 13300, 13400)]
+    state = _make_state(prs=prs)
+
+    with (
+        patch("openlibrary.plugins.openlibrary.status._load_testing_state", return_value=state),
+        patch("openlibrary.plugins.openlibrary.status._save_testing_state") as mock_save,
+    ):
+        result = status_module.reorder_prs([13400, 13100, 13999, 13100])
+
+    assert [p.pr for p in state.prs] == [13400, 13200, 13300, 13100]
+    assert [r["pr"] for r in result["prs"]] == [13400, 13200, 13300, 13100]
+    mock_save.assert_called_once_with(state)
+
+
+def test_reorder_endpoint(fastapi_client, mock_authenticated_user, mock_maintainer_user):
+    mock_maintainer_user(is_maintainer=True)
+    state = _make_state(prs=[_make_pr(pr_number=n) for n in (13100, 13200)])
+
+    with (
+        patch("openlibrary.plugins.openlibrary.status._load_testing_state", return_value=state),
+        patch("openlibrary.plugins.openlibrary.status._save_testing_state"),
+    ):
+        response = fastapi_client.put("/status/testing/order", json={"prs": [13200, 13100]})
+
+    assert response.status_code == 200
+    assert [r["pr"] for r in response.json()["prs"]] == [13200, 13100]
+
+
+def test_reorder_forbidden_for_non_maintainer(fastapi_client, mock_authenticated_user, mock_maintainer_user):
+    mock_maintainer_user(is_maintainer=False)
+
+    response = fastapi_client.put("/status/testing/order", json={"prs": [13200, 13100]})
+
+    assert response.status_code == 403
+
+
 @pytest.mark.parametrize(
     ("age_seconds", "expected"),
     [(60, True), (status_module._DEPLOY_WINDOW + 60, False)],
