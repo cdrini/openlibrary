@@ -1258,8 +1258,15 @@ div.excerpt .attribution {
 .roles-form .floating-label {
   flex: 1;
 }
-.roles-form__add {
+.roles-form__add,
+.roles-form__buttons {
   justify-self: start;
+}
+.roles-form__buttons {
+  gap: var(--spacing-inline-sm);
+}
+.roles-form--edit {
+  margin: var(--spacing-stack-xs) 0;
 }
 #roles table.identifiers {
   width: 100%;
@@ -1275,6 +1282,11 @@ div.excerpt .attribution {
   }
   #roles table.identifiers tr.repeat-item td:nth-child(2) {
     flex: 1;
+  }
+  #roles table.identifiers tr.contributor-editor td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
   }
 }
 @media all and (min-width: 960px) /* @width-breakpoint-desktop */ {

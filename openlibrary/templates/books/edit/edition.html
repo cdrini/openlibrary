@@ -193,7 +193,7 @@ $jsdef render_work_autocomplete_item(item):
         <fieldset class="minor formBackLeft">
             <legend>$_("Contributors")</legend>
 
-            <div class="formElement" id="roles" data-config="$json_encode({'Please select a role.': _('Please select a role.'), 'You need to give this ROLE a name.': _('You need to give this ROLE a name.'), 'Select an author from the list, or leave the author field empty.': _('Select an author from the list, or leave the author field empty.')})">
+            <div class="formElement" id="roles" data-config="$json_encode({'Please select a role.': _('Please select a role.'), 'You need to give this ROLE a name.': _('You need to give this ROLE a name.'), 'Select an author from the list, or leave the author field empty.': _('Select an author from the list, or leave the author field empty.'), 'Save': _('Save'), 'Cancel': _('Cancel')})">
                 <div class="label">
                     <label for="select-role">$_("List the people involved")</label>
                     <span class="tip"></span>
@@ -225,14 +225,14 @@ $jsdef render_work_autocomplete_item(item):
                     <table class="identifiers">
                         <tbody id="roles-display">
                             <tr id="roles-template" class="repeat-item" style="display: none;">
-                                <td align="right"><strong>{{role}}</strong></td>
-                                <td>{{name}}
+                                <td align="right"><strong class="contributor-role">{{role}}</strong></td>
+                                <td><span class="contributor-name">{{name}}</span>
                                     <a class="contributor-author-link" href="{{author}}" target="_blank">{{author.split('/').pop()}}</a>
                                     <input type="hidden" name="{{prefix}}contributors--{{index}}--role" value="{{role}}"/>
                                     <input type="hidden" name="{{prefix}}contributors--{{index}}--name" value="{{name}}"/>
                                     <input type="hidden" name="{{prefix}}contributors--{{index}}--author--key" value="{{author}}"/>
                                 </td>
-                                <td><a href="javascript:;" class="repeat-remove red plain" title="$_('Remove this contributor')">[x]</a></td>
+                                <td class="contributor-actions"><a href="javascript:;" class="contributor-edit plain" title="$_('Edit this contributor')">[$_('edit')]</a> <a href="javascript:;" class="repeat-remove red plain" title="$_('Remove this contributor')">[x]</a></td>
                             </tr>
                             $ work = book.works[0]
                             $for i, a in enumerate(work.get_authors()):
@@ -243,15 +243,15 @@ $jsdef render_work_autocomplete_item(item):
                                 </tr>
                             $for i, c in enumerate(book.contributors):
                                 <tr class="repeat-item">
-                                    <td align="right"><strong>$c.role</strong></td>
-                                    <td>$c.name
+                                    <td align="right"><strong class="contributor-role">$c.role</strong></td>
+                                    <td><span class="contributor-name">$c.name</span>
                                         $if c.get('author'):
                                             <a class="contributor-author-link" href="$c.author.key" target="_blank">$c.author.key.split('/')[-1]</a>
                                             <input type="hidden" name="edition--contributors--${i}--author--key" value="$c.author.key"/>
                                         <input type="hidden" name="edition--contributors--${i}--role" value="$c.role"/>
                                         <input type="hidden" name="edition--contributors--${i}--name" value="$c.name"/>
                                     </td>
-                                    <td><a href="javascript:;" class="repeat-remove red plain" title="$_('Remove this contributor')">[x]</a></td>
+                                    <td class="contributor-actions"><a href="javascript:;" class="contributor-edit plain" title="$_('Edit this contributor')">[$_('edit')]</a> <a href="javascript:;" class="repeat-remove red plain" title="$_('Remove this contributor')">[x]</a></td>
                                 </tr>
                         </tbody>
                     </table>

@@ -68,15 +68,14 @@ function getJqueryElements(selector) {
     return jQueryElementArray;
 }
 
-export function initRoleValidation() {
-    initJqueryRepeat();
-    initAutocomplete();
-    const dataConfig = JSON.parse(document.querySelector('#roles').dataset.config);
-    const $authorInput = $('#role-author');
-    const $authorKey = $('#role-author-key');
-
-    // The linked author record is optional and independent of the name: the name is
-    // what the edition credits, so it is only filled in from the author when blank.
+/**
+ * Makes a contributor's "link to author" input autocomplete against author records.
+ * The link is optional and independent of the name: the name is what the edition
+ * credits, so it is only filled in from the author when blank.
+ * @param {JQuery<HTMLElement>} $form  element containing the name and author inputs
+ */
+function setupContributorAuthorInput($form) {
+    const $authorInput = $form.find('.ac-input__visible');
     $authorInput.setup_autocomplete(
         {
             endpoint: '/authors/_autocomplete',
@@ -91,24 +90,137 @@ export function initRoleValidation() {
         }
     );
     $authorInput.on('autocompleteselect', (_event, ui) => {
-        if (!$('#role-name').val().trim()) {
-            $('#role-name').val(ui.item.value);
+        const $name = $form.find('.floating-label__input').not('.ac-input__visible');
+        if (!$name.val().trim()) {
+            $name.val(ui.item.value);
         }
     });
     // Typing after a selection invalidates it
-    $authorInput.on('input', () => $authorKey.val(''));
+    $authorInput.on('input', () => $form.find('.ac-input__value').val(''));
+}
+
+/**
+ * @param {Object} dataConfig  translated messages
+ * @param {{role: string, name: string, authorText: string, authorKey: string}} contributor
+ * @return {?{message: string, field: string}} the first problem found, if any
+ */
+function validateContributor(dataConfig, { role, name, authorText, authorKey }) {
+    if (role === '' || role === '---') {
+        return { message: dataConfig['Please select a role.'], field: 'role' };
+    }
+    if (name === '') {
+        return { message: dataConfig['You need to give this ROLE a name.'].replace(/ROLE/, role), field: 'name' };
+    }
+    if (authorText && !authorKey) {
+        return { message: dataConfig['Select an author from the list, or leave the author field empty.'], field: 'author' };
+    }
+    return null;
+}
+
+/**
+ * Sets a contributor row's displayed text and hidden form inputs.
+ * @param {JQuery<HTMLElement>} $row
+ * @param {{role: string, name: string, authorKey: string}} contributor
+ */
+function updateContributorRow($row, { role, name, authorKey }) {
+    $row.find('.contributor-role').text(role);
+    $row.find('.contributor-name').text(name);
+    const $roleInput = $row.find('input[name$="--role"]');
+    $roleInput.val(role);
+    $row.find('input[name$="--name"]').val(name);
+
+    let $keyInput = $row.find('input[name$="--author--key"]');
+    if (!$keyInput.length) {
+        $keyInput = $('<input type="hidden">').attr('name', $roleInput.attr('name').replace(/--role$/, '--author--key'));
+        $roleInput.before($keyInput);
+    }
+    $keyInput.val(authorKey);
+
+    $row.find('.contributor-author-link').remove();
+    if (authorKey) {
+        $('<a class="contributor-author-link" target="_blank">')
+            .attr('href', authorKey)
+            .text(authorKey.split('/').pop())
+            .insertAfter($row.find('.contributor-name'));
+    }
+}
+
+/**
+ * Opens an inline editor for a contributor row, built by cloning the add form so the
+ * list of roles is only defined once.
+ * @param {Object} dataConfig  translated messages
+ * @param {JQuery<HTMLElement>} $row
+ */
+function editContributorRow(dataConfig, $row) {
+    if ($row.next().hasClass('contributor-editor')) return;
+    const $form = $('#roles-form').clone();
+    // The clone must not collide with the add form's ids or submit with the page
+    $form.removeAttr('id').find('[id]').removeAttr('id');
+    $form.find('[name]').removeAttr('name');
+    $form.find('.ac-input__visible').removeClass('ui-autocomplete-input').removeAttr('autocomplete');
+
+    const $role = $form.find('select');
+    const $name = $form.find('.floating-label__input').not('.ac-input__visible');
+    const $authorText = $form.find('.ac-input__visible');
+    const $authorKey = $form.find('.ac-input__value');
+    const authorKey = $row.find('input[name$="--author--key"]').val() || '';
+    $role.val($row.find('input[name$="--role"]').val());
+    $name.val($row.find('input[name$="--name"]').val());
+    $authorText.val(authorKey.split('/').pop());
+    $authorKey.val(authorKey);
+
+    const $save = $('<button type="button" class="larger">').text(dataConfig['Save']);
+    const $cancel = $('<button type="button" class="larger">').text(dataConfig['Cancel']);
+    $form.find('.repeat-add').replaceWith($('<div class="roles-form__buttons">').append($save, $cancel));
+    $form.addClass('roles-form--edit');
+
+    const $editor = $('<tr class="contributor-editor">').append($('<td colspan="3">').append($form));
+    const close = () => {
+        $editor.remove();
+        $row.show();
+    };
+    $save.on('click', () => {
+        const contributor = {
+            role: $role.val(),
+            name: $name.val().trim(),
+            authorText: $authorText.val().trim(),
+            authorKey: $authorKey.val()
+        };
+        const problem = validateContributor(dataConfig, contributor);
+        if (problem) {
+            const fields = { role: $role, name: $name, author: $authorText };
+            return error('#role-errors', fields[problem.field], problem.message);
+        }
+        $('#role-errors').hide();
+        updateContributorRow($row, contributor);
+        close();
+    });
+    $cancel.on('click', close);
+
+    $row.hide().after($editor);
+    setupContributorAuthorInput($form);
+    $name.trigger('focus');
+}
+
+export function initRoleValidation() {
+    initJqueryRepeat();
+    initAutocomplete();
+    const dataConfig = JSON.parse(document.querySelector('#roles').dataset.config);
+    const $authorInput = $('#role-author');
+    setupContributorAuthorInput($('#roles-form'));
 
     $('#roles').repeat({
         vars: { prefix: 'edition--' },
         validate: function (data) {
-            if (data.role === '' || data.role === '---') {
-                return error('#role-errors', '#select-role', dataConfig['Please select a role.']);
-            }
-            if (data.name === '') {
-                return error('#role-errors', '#role-name', dataConfig['You need to give this ROLE a name.'].replace(/ROLE/, data.role));
-            }
-            if ($authorInput.val().trim() && !data.author) {
-                return error('#role-errors', '#role-author', dataConfig['Select an author from the list, or leave the author field empty.']);
+            const problem = validateContributor(dataConfig, {
+                role: data.role,
+                name: data.name,
+                authorText: $authorInput.val().trim(),
+                authorKey: data.author
+            });
+            if (problem) {
+                const fields = { role: '#select-role', name: '#role-name', author: '#role-author' };
+                return error('#role-errors', fields[problem.field], problem.message);
             }
             $('#role-errors').hide();
             $('#select-role, #role-name, #role-author, #role-author-key').val('');
@@ -117,6 +229,9 @@ export function initRoleValidation() {
     });
     $('#roles').on('repeat-add', () => {
         $('#roles-display .contributor-author-link[href=""]').remove();
+    });
+    $('#roles-display').on('click', '.contributor-edit', function () {
+        editContributorRow(dataConfig, $(this).closest('tr'));
     });
 }
 
