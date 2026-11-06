@@ -87,6 +87,7 @@
         "render_seed_field": "readonly",
         "render_language_field": "readonly",
         "render_lazy_work_preview": "readonly",
+        "render_lazy_author_preview": "readonly",
         "render_language_autocomplete_item": "readonly",
         "render_work_field": "readonly",
         "render_work_autocomplete_item": "readonly"

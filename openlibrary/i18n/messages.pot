@@ -3642,6 +3642,10 @@ msgid "You need to give this ROLE a name."
 msgstr ""
 
 #: books/edit/edition.html
+msgid "Select an author from the list, or leave the author field empty."
+msgstr ""
+
+#: books/edit/edition.html
 msgid "List the people involved"
 msgstr ""
 
@@ -3651,6 +3655,10 @@ msgstr ""
 
 #: books/edit/edition.html
 msgid "Add a new role"
+msgstr ""
+
+#: books/edit/edition.html
+msgid "Link to author (optional)"
 msgstr ""
 
 #: books/edit/edition.html

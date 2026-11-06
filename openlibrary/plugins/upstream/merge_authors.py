@@ -129,7 +129,10 @@ class AuthorRedirectEngine(BasicRedirectEngine):
 
         q = {"type": "/type/work", "authors": {"author": {"key": key}}, "limit": 10000}
         work_keys_2 = site.get().things(q)
-        return edition_keys + work_keys_1 + work_keys_2
+
+        q = {"type": "/type/edition", "contributors": {"author": {"key": key}}, "limit": 10000}
+        contributed_edition_keys = site.get().things(q)
+        return edition_keys + work_keys_1 + work_keys_2 + contributed_edition_keys
 
 
 class AuthorMergeEngine(BasicMergeEngine):

@@ -150,6 +150,19 @@ export function init() {
     }
 
     /**
+     * Turns each matched text input into a single-value autocomplete. The input must sit
+     * inside an `.ac-input` element containing a hidden `.ac-input__value` input, which
+     * receives the key of the selected item.
+     * @param {OpenLibraryAutocompleteOptions} ol_ac_opts
+     * @param {Object} ac_opts - options given to override defaults of $.autocomplete; see that.
+     */
+    $.fn.setup_autocomplete = function (ol_ac_opts, ac_opts) {
+        return this.each(function () {
+            setup_autocomplete(this, ol_ac_opts, ac_opts);
+        });
+    };
+
+    /**
      * @this HTMLElement - the element that contains the different inputs.
      * Expects an html structure like:
      * <div class="multi-input-autocomplete">

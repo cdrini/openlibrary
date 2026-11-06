@@ -720,8 +720,22 @@ class SaveBookHelper:
         for k in ["roles", "identifiers", "classifications"]:
             edition[k] = edition.get(k) or []
 
+        self._validate_contributor_authors(edition.get("contributors") or [])
         self._prevent_ocaid_deletion(edition)
         return edition
+
+    @staticmethod
+    def _validate_contributor_authors(contributors: list[dict]) -> None:
+        """Ensure every contributor's optional `author` link points at an existing author.
+
+        `contributors` isn't declared on /type/edition, so infobase won't check these references.
+        """
+        keys = {c["author"]["key"] for c in contributors if c.get("author")}
+        if not keys:
+            return
+        found = {doc.key for doc in web.ctx.site.get_many(list(keys)) if doc.type.key == "/type/author"}
+        if missing := keys - found:
+            raise ClientException("400 Bad Request", f"Contributor author link is not an author: {', '.join(sorted(missing))}")
 
     def process_work(self, work: web.Storage) -> web.Storage:
         """

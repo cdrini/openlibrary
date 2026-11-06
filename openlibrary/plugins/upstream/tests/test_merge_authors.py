@@ -221,6 +221,21 @@ class TestAuthorRedirectEngine:
             "title": "book 1",
         }
 
+    def test_find_references_includes_contributor_links(self):
+        key = "/authors/OL2A"
+        web.ctx.site.add_query({"type": "/type/edition", "contributors": {"author": {"key": key}}, "limit": 10000}, ["/books/OL5M"])
+        assert "/books/OL5M" in AuthorRedirectEngine().find_references(key)
+
+    def test_fix_edition_contributors(self):
+        update_references = AuthorRedirectEngine().update_references
+        edition = {
+            "key": "/books/OL2M",
+            "contributors": [{"role": "Translator", "name": "Tr.", "author": {"key": "/authors/OL2A"}}],
+        }
+        assert update_references(edition, "/authors/OL1A", ["/authors/OL2A"])["contributors"] == [
+            {"role": "Translator", "name": "Tr.", "author": {"key": "/authors/OL1A"}}
+        ]
+
 
 class TestAuthorMergeEngine:
     def setup_method(self, method):

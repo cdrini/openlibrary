@@ -283,6 +283,60 @@ class TestSaveBookHelper:
         assert web.ctx.site.get("/works/OL1W").title == "Modified Work Title"
         assert web.ctx.site.get("/books/OL1M").title == "Modified Edition Title"
 
+    def _save_contributors(self, contributors: dict[str, str]) -> None:
+        web.ctx.site.save_many(
+            [
+                {"type": {"key": "/type/work"}, "key": "/works/OL1W", "title": "Work"},
+                {
+                    "type": {"key": "/type/edition"},
+                    "key": "/books/OL1M",
+                    "title": "Edition",
+                    "works": [{"key": "/works/OL1W"}],
+                },
+                {"type": {"key": "/type/author"}, "key": "/authors/OL1A", "name": "Linked Author"},
+            ]
+        )
+        formdata = web.storage(
+            {
+                "work--key": "/works/OL1W",
+                "work--title": "Work",
+                "edition--title": "Edition",
+                "edition--works--0--key": "/works/OL1W",
+                **contributors,
+            }
+        )
+        s = addbook.SaveBookHelper(web.ctx.site.get("/works/OL1W"), web.ctx.site.get("/books/OL1M"))
+        s.save(formdata)
+
+    def test_contributor_author_links(self, monkeypatch):
+        monkeypatch.setattr(accounts, "get_current_user", mock_user)
+        self._save_contributors(
+            {
+                "edition--contributors--0--role": "Translator",
+                "edition--contributors--0--name": "Name As Credited",
+                "edition--contributors--0--author--key": "/authors/OL1A",
+                "edition--contributors--1--role": "Illustrator",
+                "edition--contributors--1--name": "Unlinked",
+                "edition--contributors--1--author--key": "",
+            }
+        )
+        assert web.ctx.site.get("/books/OL1M").dict()["contributors"] == [
+            {"role": "Translator", "name": "Name As Credited", "author": {"key": "/authors/OL1A"}},
+            {"role": "Illustrator", "name": "Unlinked"},
+        ]
+
+    @pytest.mark.parametrize("key", ["/authors/OL404A", "/works/OL1W"])
+    def test_contributor_author_link_must_be_author(self, monkeypatch, key):
+        monkeypatch.setattr(accounts, "get_current_user", mock_user)
+        with pytest.raises(addbook.ClientException, match=key):
+            self._save_contributors(
+                {
+                    "edition--contributors--0--role": "Translator",
+                    "edition--contributors--0--name": "Someone",
+                    "edition--contributors--0--author--key": key,
+                }
+            )
+
     def test_moving_edition(self, monkeypatch):
         monkeypatch.setattr(accounts, "get_current_user", mock_user)
 

@@ -53,7 +53,10 @@ $def with (book)
         $if contributors:
             <bibo:contributorList rdf:parseType="Collection">
             $for c in contributors:
-                <foaf:Agent><foaf:name>$c.name</foaf:name></foaf:Agent>
+                $if c.get('author'):
+                    <foaf:Agent rdf:about="http://openlibrary.org$c.author.key"><foaf:name>$c.name</foaf:name></foaf:Agent>
+                $else:
+                    <foaf:Agent><foaf:name>$c.name</foaf:name></foaf:Agent>
             </bibo:contributorList>
         $:display("dcterms:contributor", book.contributions)
         <!-- bibliographic description -->

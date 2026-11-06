@@ -345,6 +345,10 @@ $ component_times['affiliate_links component'] = time() - component_times['affil
               <h3>$_("Contributors")</h3>
               <dl class="meta">
               $for c in contributors:
+                  $if c.get('author') and c.name:
+                    <dt>$c.role</dt>
+                    <dd class="object"><a href="$c.author.key">$c.name</a></dd>
+                  $else:
                     $:display_value(c.role, c.name)
               </dl>
             </div>

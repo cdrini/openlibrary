@@ -70,7 +70,34 @@ function getJqueryElements(selector) {
 
 export function initRoleValidation() {
     initJqueryRepeat();
+    initAutocomplete();
     const dataConfig = JSON.parse(document.querySelector('#roles').dataset.config);
+    const $authorInput = $('#role-author');
+    const $authorKey = $('#role-author-key');
+
+    // The linked author record is optional and independent of the name: the name is
+    // what the edition credits, so it is only filled in from the author when blank.
+    $authorInput.setup_autocomplete(
+        {
+            endpoint: '/authors/_autocomplete',
+            addnew: false
+        },
+        {
+            minChars: 2,
+            max: 11,
+            matchSubset: false,
+            autoFill: true,
+            formatItem: render_lazy_author_preview
+        }
+    );
+    $authorInput.on('autocompleteselect', (_event, ui) => {
+        if (!$('#role-name').val().trim()) {
+            $('#role-name').val(ui.item.value);
+        }
+    });
+    // Typing after a selection invalidates it
+    $authorInput.on('input', () => $authorKey.val(''));
+
     $('#roles').repeat({
         vars: { prefix: 'edition--' },
         validate: function (data) {
@@ -80,10 +107,16 @@ export function initRoleValidation() {
             if (data.name === '') {
                 return error('#role-errors', '#role-name', dataConfig['You need to give this ROLE a name.'].replace(/ROLE/, data.role));
             }
+            if ($authorInput.val().trim() && !data.author) {
+                return error('#role-errors', '#role-author', dataConfig['Select an author from the list, or leave the author field empty.']);
+            }
             $('#role-errors').hide();
-            $('#select-role, #role-name').val('');
+            $('#select-role, #role-name, #role-author, #role-author-key').val('');
             return true;
         }
+    });
+    $('#roles').on('repeat-add', () => {
+        $('#roles-display .contributor-author-link[href=""]').remove();
     });
 }
 
