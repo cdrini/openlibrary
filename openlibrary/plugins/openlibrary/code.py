@@ -23,6 +23,7 @@ from openlibrary.core.batch_imports import (
     batch_import,
 )
 from openlibrary.core.env import get_deployment_name, get_ol_env
+from openlibrary.core.imports import REIMPORT_FAILED_COMMENT, REIMPORT_IMPORTED_COMMENT
 from openlibrary.core.jinja import render_jinja_template
 from openlibrary.core.shell import SiteLayoutTemplate
 from openlibrary.i18n import gettext as _
@@ -440,12 +441,18 @@ class batch_imports(delegate.page):
         # Get the upload from web.py. See the template for the <form> used.
         batch_result = None
         form_data = web.input()
+        # Unchecked checkboxes aren't submitted, so absence means "off".
+        reimport = {
+            "reimport_failed": form_data.get("reimportFailed") == "true",
+            "reimport_imported": form_data.get("reimportImported") == "true",
+        }
         if form_data.get("batchImportFile"):
-            batch_result = batch_import(form_data["batchImportFile"], import_status=import_status)
+            batch_result = batch_import(form_data["batchImportFile"], import_status=import_status, **reimport)
         elif form_data.get("batchImportText"):
             batch_result = batch_import(
                 form_data["batchImportText"].encode("utf-8"),
                 import_status=import_status,
+                **reimport,
             )
         else:
             add_flash_message(
@@ -515,6 +522,14 @@ class BatchImportView(delegate.page):
             vars=locals(),
         )
 
+        reimport_counts = {
+            row.comments: row.count
+            for row in db.query(
+                "SELECT comments, COUNT(*) AS count FROM import_item WHERE batch_id=$batch_id AND comments IN $comments GROUP BY comments",
+                vars={"batch_id": batch_id, "comments": [REIMPORT_FAILED_COMMENT, REIMPORT_IMPORTED_COMMENT]},
+            )
+        }
+
         return render_template(
             "batch_import_view.html",
             batch=batch,
@@ -524,6 +539,8 @@ class BatchImportView(delegate.page):
             limit=limit,
             sort=sort,
             status_counts=status_counts,
+            reimported_failed=reimport_counts.get(REIMPORT_FAILED_COMMENT, 0),
+            reimported_imported=reimport_counts.get(REIMPORT_IMPORTED_COMMENT, 0),
         )
 
 

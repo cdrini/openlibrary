@@ -16,6 +16,24 @@ $var title: $_("Batch Imports")
       <p>$_('Or copy/paste JSONL text:')</p>
       <textarea name="batchImportText" rows="10" cols="70"></textarea>
       <hr/>
+      <details>
+        <summary>$_('Advanced')</summary>
+        <p>$_('By default, records whose ID is already in the import queue are skipped. These options let some of them through:')</p>
+        <p>
+          <label>
+            <input type="checkbox" name="reimportFailed" value="true" checked>
+            $_('Re-import previously failed IDs - use if you fixed a data issue in your JSONL')
+          </label>
+        </p>
+        <p>
+          <label>
+            <input type="checkbox" name="reimportImported" value="true">
+            $_('Re-import previously imported IDs - useful if you now have more fields in your JSONL to import')
+          </label>
+        </p>
+        <p>$_('IDs that are still waiting to be imported are always skipped.')</p>
+      </details>
+      <hr/>
       <button type="submit">$_('Import')</button>
     </form>
 
@@ -32,6 +50,14 @@ $var title: $_("Batch Imports")
       <p>$_('Records submitted:') $batch_result.batch.total_submitted</p>
       <p>$_('Total queued:') $batch_result.batch.total_queued</p>
       <p>$_('Total skipped:') $batch_result.batch.total_skipped</p>
+      $if batch_result.batch.total_requeued > 0:
+        <details>
+          <summary>$_('Queued again although already in the queue (re-imports): %(count)d', count=batch_result.batch.total_requeued)</summary>
+          <ol>
+            $for item in batch_result.batch.items_requeued:
+              <li>$item</li>
+          </ol>
+        </details>
       $if batch_result.batch.total_skipped > 0:
         <details>
           <summary>$_('Not queued because they are already present in the queue:')</summary>

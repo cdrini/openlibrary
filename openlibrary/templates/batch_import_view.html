@@ -1,4 +1,4 @@
-$def with (batch, rows, total_rows, page, limit, sort, status_counts)
+$def with (batch, rows, total_rows, page, limit, sort, status_counts, reimported_failed=0, reimported_imported=0)
 $var title: $_("Batch Import Status")
 
 <div id="contentHead">
@@ -22,6 +22,17 @@ $var title: $_("Batch Import Status")
             $else:
               <li>$status_count.status: $status_count.count</li>
     </ul>
+
+    $if reimported_failed or reimported_imported:
+      <h3>$_('Re-imports')</h3>
+      <p>$_('This batch was submitted with re-import options, so it includes IDs that were already in the import queue:')</p>
+      <ul>
+        $if reimported_failed:
+          <li>$_('%(count)d previously failed', count=reimported_failed)</li>
+        $if reimported_imported:
+          <li>$_('%(count)d previously imported: importing these will update the existing records with this data', count=reimported_imported)</li>
+      </ul>
+      <p>$_('Each re-imported item is marked in the Comments column below.')</p>
 
     <h2>$_('Import Items')</h2>
     <table class="changeHistory">

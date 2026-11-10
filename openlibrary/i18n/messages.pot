@@ -121,6 +121,26 @@ msgstr ""
 msgid "Or copy/paste JSONL text:"
 msgstr ""
 
+#: batch_import.html
+msgid "Advanced"
+msgstr ""
+
+#: batch_import.html
+msgid "By default, records whose ID is already in the import queue are skipped. These options let some of them through:"
+msgstr ""
+
+#: batch_import.html
+msgid "Re-import previously failed IDs - use if you fixed a data issue in your JSONL"
+msgstr ""
+
+#: batch_import.html
+msgid "Re-import previously imported IDs - useful if you now have more fields in your JSONL to import"
+msgstr ""
+
+#: batch_import.html
+msgid "IDs that are still waiting to be imported are always skipped."
+msgstr ""
+
 #: batch_import.html import_preview.html
 msgid "Import"
 msgstr ""
@@ -160,6 +180,11 @@ msgstr ""
 
 #: batch_import.html
 msgid "Total skipped:"
+msgstr ""
+
+#: batch_import.html
+#, python-format
+msgid "Queued again although already in the queue (re-imports): %(count)d"
 msgstr ""
 
 #: batch_import.html
@@ -220,6 +245,28 @@ msgstr ""
 
 #: batch_import_view.html
 msgid "Approve"
+msgstr ""
+
+#: batch_import_view.html
+msgid "Re-imports"
+msgstr ""
+
+#: batch_import_view.html
+msgid "This batch was submitted with re-import options, so it includes IDs that were already in the import queue:"
+msgstr ""
+
+#: batch_import_view.html
+#, python-format
+msgid "%(count)d previously failed"
+msgstr ""
+
+#: batch_import_view.html
+#, python-format
+msgid "%(count)d previously imported: importing these will update the existing records with this data"
+msgstr ""
+
+#: batch_import_view.html
+msgid "Each re-imported item is marked in the Comments column below."
 msgstr ""
 
 #: batch_import_view.html

@@ -14,7 +14,7 @@ from openlibrary.catalog.add_book import (
     SourceNeedsISBN,
     validate_record,
 )
-from openlibrary.core.imports import Batch
+from openlibrary.core.imports import IMPORTED_STATUSES, Batch
 from openlibrary.plugins.importapi.import_edition_builder import import_edition_builder
 
 if TYPE_CHECKING:
@@ -71,7 +71,12 @@ class BatchResult:
     errors: list[BatchImportError] | None = None
 
 
-def batch_import(raw_data: bytes, import_status: str) -> BatchResult:
+def batch_import(
+    raw_data: bytes,
+    import_status: str,
+    reimport_failed: bool = False,
+    reimport_imported: bool = False,
+) -> BatchResult:
     """
     This processes raw byte data from a JSONL POST to the batch import endpoint.
 
@@ -84,6 +89,9 @@ def batch_import(raw_data: bytes, import_status: str) -> BatchResult:
     The line numbers errors use 1-based counting because they are line numbers in a file.
 
     import_status: "pending", "needs_review", etc.
+    reimport_failed: queue records whose ID only ever failed to import before.
+    reimport_imported: queue records whose ID was already imported, so the
+        existing records are updated with the new data.
     """
     user = accounts.get_current_user()
     username = user.get_username() if user else None
@@ -132,6 +140,7 @@ def batch_import(raw_data: bytes, import_status: str) -> BatchResult:
 
     # Create the batch
     batch = Batch.find(batch_name) or Batch.new(name=batch_name, submitter=username)
-    batch.add_items(batch_data)
+    requeue_statuses = (("failed",) if reimport_failed else ()) + (IMPORTED_STATUSES if reimport_imported else ())
+    batch.add_items(batch_data, requeue_statuses=requeue_statuses)
 
     return BatchResult(batch=batch)

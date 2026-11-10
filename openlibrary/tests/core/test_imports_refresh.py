@@ -426,3 +426,55 @@ class TestLegacyBatchInsertsPostgres(TestLegacyBatchInserts):
     @pytest.fixture
     def batch_insert_db(self, pg_import_db):
         return pg_import_db
+
+
+class TestRequeueStatuses:
+    """``add_items(requeue_statuses=...)`` lets a resubmitted ID through only when
+    every existing row for it, in other batches, has one of those statuses."""
+
+    @pytest.fixture
+    def previous(self, import_db):
+        old = Batch.new("old")
+        old.add_items([item(f"isbn:{n}", 1.0) for n in ("failed", "created", "pending", "mixed")])
+        other = Batch.new("other")
+        import_db.insert("import_item", id=100, batch_id=other.id, ia_id="isbn:mixed", status="pending")
+        import_db.update("import_item", where="ia_id='isbn:failed'", status="failed")
+        import_db.update("import_item", where="ia_id='isbn:created'", status="created", data=None)
+        # isbn:mixed failed in one batch and is still queued in another.
+        import_db.update("import_item", where="ia_id='isbn:mixed' AND batch_id=$id", vars={"id": old.id}, status="failed")
+        return [item(f"isbn:{n}", 2.0) for n in ("failed", "created", "pending", "mixed", "new")]
+
+    def new_rows(self, db, batch) -> dict[str, web.storage]:
+        return {r.ia_id: r for r in db.select("import_item", where="batch_id=$id", vars={"id": batch.id})}
+
+    def test_default_skips_every_existing_id(self, import_db, previous):
+        batch = Batch.new("resubmit")
+        batch.add_items(previous)
+        assert set(self.new_rows(import_db, batch)) == {"isbn:new"}
+        assert batch.total_requeued == 0
+
+    def test_requeue_failed(self, import_db, previous):
+        batch = Batch.new("resubmit")
+        batch.add_items(previous, requeue_statuses=("failed",))
+
+        new = self.new_rows(import_db, batch)
+        assert set(new) == {"isbn:failed", "isbn:new"}
+        assert new["isbn:failed"].comments == "Re-import of an ID that previously failed"
+        assert json.loads(new["isbn:failed"].data)["acquisitions"][0]["data"]["price"] == 2.0
+        assert new["isbn:new"].comments is None
+        assert batch.items_requeued == {"isbn:failed"}
+        assert batch.items_skipped == {"isbn:created", "isbn:pending", "isbn:mixed"}
+
+    def test_requeue_failed_and_imported(self, import_db, previous):
+        batch = Batch.new("resubmit")
+        batch.add_items(previous, requeue_statuses=("failed", "created", "modified", "found"))
+
+        new = self.new_rows(import_db, batch)
+        assert set(new) == {"isbn:failed", "isbn:created", "isbn:new"}
+        assert new["isbn:created"].comments == "Re-import of an ID that was already imported"
+
+    def test_rows_in_the_same_batch_always_block(self, import_db, previous):
+        old = Batch.find("old")
+        old.add_items(previous, requeue_statuses=("failed",))
+        assert old.total_requeued == 0
+        assert "isbn:failed" in old.items_skipped

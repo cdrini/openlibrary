@@ -56,6 +56,13 @@ def _record_changed(stored: str | None, incoming: str | None) -> bool:
         return False
 
 
+IMPORTED_STATUSES: Final = ("created", "modified", "found")
+"""Statuses of import_item rows that were imported successfully."""
+
+REIMPORT_FAILED_COMMENT: Final = "Re-import of an ID that previously failed"
+REIMPORT_IMPORTED_COMMENT: Final = "Re-import of an ID that was already imported"
+
+
 class Batch(web.storage):
     def __init__(self, mapping, *requires, **defaults):
         """
@@ -66,6 +73,8 @@ class Batch(web.storage):
         self.total_queued: int = 0
         self.total_skipped: int = 0
         self.items_skipped: set = set()
+        self.total_requeued: int = 0
+        self.items_requeued: set = set()
 
     @staticmethod
     def find(name: str, create: bool = False) -> Batch:  # type: ignore[return]
@@ -86,20 +95,36 @@ class Batch(web.storage):
             items = [line.strip() for line in file if line.strip()]
         self.add_items(items)
 
-    def dedupe_items(self, items: list[dict]) -> list[dict]:
+    def dedupe_items(self, items: list[dict], requeue_statuses: Iterable[str] = ()) -> list[dict]:
+        """Drop items whose ``ia_id`` is already in ``import_item``, in any batch.
+
+        :param requeue_statuses: let an ``ia_id`` through again when every
+            existing row for it, in other batches, has one of these statuses
+            (e.g. ``("failed",)`` to re-import records whose data was fixed).
+            Rows in this batch always block, since ``(batch_id, ia_id)`` is unique.
+        """
         ia_ids = [item.get("ia_id") for item in items if item.get("ia_id")]
-        already_present = {
-            row.ia_id
-            for row in db.query(
-                "SELECT ia_id FROM import_item WHERE ia_id IN $ia_ids",
-                vars={"ia_ids": ia_ids},
-            )
-        }
-        # ignore already present
+        requeueable: set[str | None] = set(requeue_statuses)
+        statuses_by_id: dict[str, set[str | None]] = {}
+        for row in db.query(
+            "SELECT ia_id, batch_id, status FROM import_item WHERE ia_id IN $ia_ids",
+            vars={"ia_ids": ia_ids},
+        ):
+            # A row in this batch can never be re-added, whatever its status.
+            status = row.status if row.batch_id != self.id else None
+            statuses_by_id.setdefault(row.ia_id, set()).add(status)
+        already_present = {ia_id for ia_id, statuses in statuses_by_id.items() if not statuses <= requeueable}
+        requeued = set(statuses_by_id) - already_present
+        # Recorded on the row so whoever approves the batch can see it's a re-import.
+        for item in items:
+            if item.get("ia_id") in requeued:
+                imported = statuses_by_id[item["ia_id"]] & set(IMPORTED_STATUSES)
+                item["comments"] = REIMPORT_IMPORTED_COMMENT if imported else REIMPORT_FAILED_COMMENT
         logger.info(
-            "batch %s: %d items are already present, ignoring...",
+            "batch %s: %d items are already present, ignoring; re-queuing %d...",
             self.name,
             len(already_present),
+            len(requeued),
         )
 
         # Update batch counts
@@ -107,6 +132,8 @@ class Batch(web.storage):
         self.total_skipped = len(already_present)
         self.total_queued = self.total_submitted - self.total_skipped
         self.items_skipped = already_present
+        self.total_requeued = len(requeued)
+        self.items_requeued = requeued
 
         # Those unique items whose ia_id's aren't already present
         return [item for item in items if item.get("ia_id") not in already_present]
@@ -237,6 +264,7 @@ class Batch(web.storage):
                     "status": item.get("status", "pending"),
                     "data": (json.dumps(item.get("data"), sort_keys=True) if item.get("data") else None),
                     "submitter": item.get("submitter") or None,
+                    "comments": item.get("comments") or None,
                 }
             )
             for item in items
@@ -245,12 +273,12 @@ class Batch(web.storage):
     @staticmethod
     def _insert_items(items: list[dict]) -> None:
         """Insert normalized rows in one statement, leaving duplicate keys alone."""
-        columns = ("batch_id", "ia_id", "status", "data", "submitter")
+        columns = ("batch_id", "ia_id", "status", "data", "submitter", "comments")
         values = []
         params = {}
         for index, item in enumerate(items):
             values.append("(" + ", ".join(f"${column}_{index}" for column in columns) + ")")
-            # Legacy string items omit status, data, and submitter.
+            # Legacy string items omit status, data, submitter, and comments.
             params.update({f"{column}_{index}": item.get(column, "pending" if column == "status" else None) for column in columns})
 
         oldb = db.get_db()
@@ -263,19 +291,20 @@ class Batch(web.storage):
             vars=params,
         )
 
-    def add_items(self, items: list[str] | list[dict]) -> None:
+    def add_items(self, items: list[str] | list[dict], requeue_statuses: Iterable[str] = ()) -> None:
         """
         :param items: either a list of `ia_id`  (legacy) or a list of dicts
             containing keys `ia_id` and book `data`. In the case of
             the latter, `ia_id` will be of form e.g. "isbn:1234567890";
             i.e. of a format id_type:value which cannot be a valid IA id.
+        :param requeue_statuses: see :meth:`dedupe_items`.
         """
         if not items:
             return None
 
         logger.info("batch %s: adding %d items", self.name, len(items))
 
-        items = self.dedupe_items(self.normalize_items(items))
+        items = self.dedupe_items(self.normalize_items(items), requeue_statuses)
         if items:
             self._insert_items(items)
 
