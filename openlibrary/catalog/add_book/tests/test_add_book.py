@@ -1339,7 +1339,7 @@ def test_covers_are_added_to_edition(mock_site, monkeypatch) -> None:
         "authors": [{"name": "John Smith"}],
         "publishers": ["Black Spot"],
         "publish_date": "Jan 09, 2011",
-        "cover": "https://www.covers.org/cover.jpg",
+        "cover": "https://m.media-amazon.com/images/I/cover.jpg",
     }
 
     monkeypatch.setattr(add_book, "add_cover", lambda _, __, account_key: 1234)
@@ -2195,3 +2195,91 @@ def test_modified_author_is_one_serializable_edit(mock_site):
 
     assert edits == [{**author.dict(), "name": "John Q. Doe"}]
     json.dumps(edits)
+
+
+def _existing_coverless_edition(mock_site) -> dict:
+    mock_site.save({"type": {"key": "/type/author"}, "name": "John Smith", "key": "/authors/OL20A"})
+    mock_site.save(
+        {
+            "authors": [{"author": {"key": "/authors/OL20A"}, "type": {"key": "/type/author_role"}}],
+            "key": "/works/OL16W",
+            "title": "Covers",
+            "type": {"key": "/type/work"},
+        }
+    )
+    mock_site.save(
+        {
+            "key": "/books/OL16M",
+            "title": "Covers",
+            "publishers": ["Black Spot"],
+            "publish_date": "Jan 09, 2011",
+            "type": {"key": "/type/edition"},
+            "source_records": ["non-marc:test"],
+            "works": [{"key": "/works/OL16W"}],
+        }
+    )
+    return {
+        "source_records": ["non-marc:test"],
+        "title": "Covers",
+        "authors": [{"name": "John Smith"}],
+        "publishers": ["Black Spot"],
+        "publish_date": "Jan 09, 2011",
+    }
+
+
+ALLOWED_COVER = "https://m.media-amazon.com/images/I/cover.jpg"
+DISALLOWED_COVER = "https://www.covers.org/cover.jpg"
+
+
+def _fail_add_cover(*args, **kwargs):
+    raise AssertionError("a preview must not upload covers")
+
+
+@pytest.mark.parametrize(("cover", "expected"), [(ALLOWED_COVER, ALLOWED_COVER), (DISALLOWED_COVER, None)])
+def test_preview_of_new_edition_reports_the_cover_it_would_add(mock_site, add_languages, ia_writeback, monkeypatch, cover, expected):
+    monkeypatch.setattr(add_book, "add_cover", _fail_add_cover)
+    rec = {
+        "title": "Cover Preview",
+        "source_records": ["test:cover"],
+        "authors": [{"name": "A N Author"}],
+        "publishers": ["P"],
+        "publish_date": "2000",
+        "cover": cover,
+    }
+
+    reply = load(rec, save=False)
+
+    assert reply.get("cover_url") == expected
+
+
+@pytest.mark.parametrize(("cover", "expected"), [(ALLOWED_COVER, ALLOWED_COVER), (DISALLOWED_COVER, None)])
+def test_preview_of_existing_edition_reports_the_cover_it_would_add(mock_site, add_languages, ia_writeback, monkeypatch, cover, expected):
+    monkeypatch.setattr(add_book, "add_cover", _fail_add_cover)
+    rec = {**_existing_coverless_edition(mock_site), "cover": cover}
+
+    reply = load(rec, save=False)
+
+    assert reply["edition"]["key"] == "/books/OL16M"
+    assert reply.get("cover_url") == expected
+    # A cover the coverstore would refuse is not added, so the edition is untouched.
+    assert reply["edition"]["status"] == ("modified" if expected else "matched")
+
+
+def test_disallowed_cover_is_not_fetched_for_an_existing_edition(mock_site, add_languages, ia_writeback, monkeypatch):
+    monkeypatch.setattr(add_book, "add_cover", _fail_add_cover)
+    rec = {**_existing_coverless_edition(mock_site), "cover": DISALLOWED_COVER}
+
+    reply = load(rec)
+
+    assert reply["edition"]["status"] == "matched"
+    assert not mock_site.get("/books/OL16M").get("covers")
+
+
+def test_saved_import_does_not_report_a_cover_url(mock_site, add_languages, ia_writeback, monkeypatch):
+    monkeypatch.setattr(add_book, "add_cover", lambda *args, **kwargs: 1234)
+    rec = {**_existing_coverless_edition(mock_site), "cover": ALLOWED_COVER}
+
+    reply = load(rec)
+
+    assert "cover_url" not in reply
+    assert mock_site.get("/books/OL16M")["covers"] == [1234]

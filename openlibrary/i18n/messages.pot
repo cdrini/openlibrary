@@ -390,6 +390,10 @@ msgid "Preview Import"
 msgstr ""
 
 #: import_preview.html
+msgid "Cover that will be added"
+msgstr ""
+
+#: import_preview.html
 msgid "Show Raw Import Data"
 msgstr ""
 

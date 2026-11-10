@@ -89,6 +89,9 @@ ID_MATCHED_SOURCES: Final = {
     "project_gutenberg": "project_gutenberg",
     "wikisource": "wikisource",
 }
+# Stands in for the id of a cover that a preview (save=False) would add, since
+# nothing is uploaded; non-positive ids are never treated as real covers.
+PREVIEW_COVER_ID: Final = -2
 ALLOWED_COVER_HOSTS: Final = (
     "archive.org",
     "books.google.com",
@@ -729,9 +732,7 @@ def load_data(  # noqa: PLR0912, PLR0915
         if save:
             cover_id = add_cover(cover_url, edition_key, account_key=account_key)
         else:
-            # Something to indicate that it will exist if we're just previewing.
-            # Must be a number for downstream code to work
-            cover_id = -2
+            cover_id = PREVIEW_COVER_ID
 
     if cover_id:
         edition["covers"] = [cover_id]
@@ -928,14 +929,12 @@ def update_edition_with_rec_data(rec: dict, account_key: str | None, edition: Ed
     """
     need_edition_save = False
     # Add cover to edition
-    if "cover" in rec and not edition.get_covers():
+    if "cover" in rec and not edition.get_covers() and check_cover_url_host(rec["cover"]):
         cover_url = rec["cover"]
         if save:
             cover_id = add_cover(cover_url, edition.key, account_key=account_key)
         else:
-            # Something to indicate that it will exist if we're just previewing
-            # Must be a number for downstream code to work
-            cover_id = -2
+            cover_id = PREVIEW_COVER_ID
 
         if cover_id:
             edition["covers"] = [cover_id]
@@ -1068,13 +1067,17 @@ def load(
     The catalog logic itself lives in :func:`_load`. (#12844)
     """
     acquisitions = rec.pop("acquisitions", None)
+    cover_url = rec.get("cover")
     reply = _load(rec, account_key=account_key, from_marc_record=from_marc_record, save=save)
-    if acquisitions and reply.get("success"):
-        if save:
-            _save_acquisitions(reply, acquisitions)
-        else:
-            # Previews write nothing, so report what an import would add.
+    if not save and reply.get("success"):
+        # Previews write nothing, so report what an import would add.
+        if acquisitions:
             reply["acquisitions"] = acquisitions
+        edition_edit: dict = next((e for e in reply.get("edits", []) if e.get("key") == reply["edition"]["key"]), {})
+        if PREVIEW_COVER_ID in (edition_edit.get("covers") or []):
+            reply["cover_url"] = cover_url
+    elif acquisitions and reply.get("success"):
+        _save_acquisitions(reply, acquisitions)
     return reply
 
 
