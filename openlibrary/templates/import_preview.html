@@ -1,4 +1,4 @@
-$def with (md_provider_factory, req, result=None)
+$def with (md_provider_factory, req, result=None, source=None)
 
 <div id="contentHead">
     <h1>$_("Import Preview")</h1>
@@ -69,8 +69,24 @@ $def with (md_provider_factory, req, result=None)
                     $:render_template('diff.html', prev, create_thing(edit), show_header=False)
         </section>
 
-    $if result:
+    $if result or source:
         <h2>$_("Preview")</h2>
+    $if source:
+        <details>
+            <summary>$_("Raw initial metadata")</summary>
+            $if source.raw_metadata:
+                <textarea readonly aria-label="raw metadata from the source" style="width: 100%; height: 300px;">$json_encode(source.raw_metadata, indent=2)</textarea>
+            $ marc = source.marc_html_record()
+            $if marc:
+                $:macros.MarcRecord(marc)
+            $elif source.marc_record:
+                <textarea readonly aria-label="raw marc record from the source" style="width: 100%; height: 300px;">$source.marc_text()</textarea>
+        </details>
+        <details>
+            <summary>$_("Import record")</summary>
+            <textarea readonly aria-label="import record built from the source" style="width: 100%; height: 300px;">$json_encode(source.import_record, indent=2)</textarea>
+        </details>
+    $if result:
         <details $cond(not result.get('success'), 'open')>
             <summary>$_("Show Raw Import Data")</summary>
             <textarea readonly aria-label="json preview of import record" style="width: 100%; height: 300px;">$json_encode(result, indent=2)</textarea>

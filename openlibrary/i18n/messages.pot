@@ -402,6 +402,14 @@ msgid "Preview Import"
 msgstr ""
 
 #: import_preview.html
+msgid "Raw initial metadata"
+msgstr ""
+
+#: import_preview.html
+msgid "Import record"
+msgstr ""
+
+#: import_preview.html
 msgid "Show Raw Import Data"
 msgstr ""
 
@@ -726,10 +734,6 @@ msgstr ""
 
 #: showia.html showmarc.html
 msgid "Invalid MARC record."
-msgstr ""
-
-#: showia.html showmarc.html
-msgid "LEADER:"
 msgstr ""
 
 #: showmarc.html

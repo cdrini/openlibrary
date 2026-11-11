@@ -644,15 +644,10 @@ async def get_amazon_metadata_async(
         return None
 
     if id_type == "isbn":
-        isbn = normalize_isbn(id_)
+        isbn = _affiliate_server_isbn(id_)
         if isbn is None:
             return None
         id_ = isbn
-        if len(id_) == 13 and id_.startswith("978"):
-            isbn = isbn_13_to_isbn_10(id_)
-            if isbn is None:
-                return None
-            id_ = isbn
 
     try:
         priority = "true" if high_priority else "false"
@@ -675,6 +670,50 @@ async def get_amazon_metadata_async(
 
 # Sync wrapper for backward compatibility.
 get_amazon_metadata = async_bridge.wrap(get_amazon_metadata_async)
+
+
+def _affiliate_server_isbn(isbn: str) -> str | None:
+    """Normalizes an ISBN to the form the affiliate server looks up: an ISBN 10
+    where one exists."""
+    normalized = normalize_isbn(isbn)
+    if normalized and len(normalized) == 13 and normalized.startswith("978"):
+        return isbn_13_to_isbn_10(normalized)
+    return normalized
+
+
+def get_amazon_metadata_and_product(
+    id_: str,
+    id_type: Literal["asin", "isbn"] = "isbn",
+    timeout: float = 10.0,
+) -> tuple[dict | None, dict | None]:
+    """
+    Like `get_amazon_metadata(..., high_priority=True, stage_import=False)`, but
+    uncached, and also returns the serialized Amazon product the metadata was
+    cleaned from, for showing what Amazon returned.
+
+    :return: (import-ready metadata, serialized Amazon product), each None if not found.
+    """
+    if not affiliate_server_url:
+        return None, None
+    if id_type == "isbn":
+        isbn = _affiliate_server_isbn(id_)
+        if isbn is None:
+            return None, None
+        id_ = isbn
+
+    try:
+        r = session.get(
+            f"http://{affiliate_server_url}/isbn/{id_}?high_priority=true&stage_import=false&include_product=true",
+            timeout=timeout,
+        )
+        r.raise_for_status()
+        data = r.json()
+        return data.get("hit"), data.get("product")
+    except requests.exceptions.ConnectionError, requests.exceptions.Timeout:
+        logger.exception("Affiliate Server unreachable")
+    except requests.exceptions.HTTPError:
+        logger.exception(f"Affiliate Server: id {id_} not found")
+    return None, None
 
 
 def stage_bookworm_metadata(identifier: str | None) -> dict | None:

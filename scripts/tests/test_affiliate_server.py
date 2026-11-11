@@ -12,6 +12,7 @@ import pytest
 # TODO: Can we remove _init_path someday :(
 sys.modules["_init_path"] = MagicMock()
 from openlibrary.mocks.mock_infobase import mock_site  # noqa: F401
+from scripts import affiliate_server
 from scripts.affiliate_server import (
     PrioritizedIdentifier,
     Priority,
@@ -396,3 +397,24 @@ class TestLoadConfigRequiresCreatorsAPI:
         """One missing key must fail loudly, not half-configure or revert to legacy."""
         with pytest.raises(RuntimeError, match="missing required amazon_creators_api"):
             self._load({"key": "ck", "secret": None, "id": "ci"}, self.LEGACY)
+
+
+@pytest.mark.parametrize("include_product", [False, True])
+def test_submit_returns_the_product_when_asked(monkeypatch, include_product):
+    product = {
+        "source_records": ["amazon:059035342X"],
+        "isbn_10": ["059035342X"],
+        "isbn_13": ["9780590353427"],
+        "title": "Harry Potter and the Sorcerer's Stone",
+        "price": "$5.10",
+    }
+    params = {"include_product": "true"} if include_product else {}
+    monkeypatch.setattr(affiliate_server.web, "amazon_api", MagicMock(), raising=False)
+    monkeypatch.setattr(affiliate_server.web, "input", lambda **defaults: {**defaults, "high_priority": "true", "stage_import": "false", **params})
+    monkeypatch.setattr(affiliate_server.cache.memcache_cache, "get", lambda key: product)
+
+    response = json.loads(affiliate_server.Submit().GET("059035342X"))
+
+    assert response["hit"]["title"] == "Harry Potter and the Sorcerer's Stone"
+    assert "price" not in response["hit"]
+    assert response.get("product") == (product if include_product else None)

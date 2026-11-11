@@ -541,6 +541,8 @@ class Submit:
               want to return AMZ metadata but don't want to import; therefore
               high_priority=true must also be 'true', or this returns nothing and
               stages nothing (unless the result is cached).
+            - include_product='true': also return the serialized Amazon `product`
+              that the `hit` was cleaned from.
 
         If `identifier` is in memcache, then return the `hit` (which is marshalled
         into a format appropriate for import on Open Library if `?high_priority=true`).
@@ -567,6 +569,7 @@ class Submit:
         input = web.input(high_priority=False, stage_import=True)
         priority = Priority.HIGH if input.get("high_priority") == "true" else Priority.LOW
         stage_import = input.get("stage_import") != "false"
+        include_product = input.get("include_product") == "true"
 
         b_asin, isbn_10, isbn_13 = normalize_identifier(identifier)
         key = isbn_10 or b_asin
@@ -585,6 +588,7 @@ class Submit:
                 {
                     "status": "success",
                     "hit": clean_amazon_metadata_for_load(product),
+                    **({"product": product} if include_product else {}),
                 }
             )
 
@@ -609,13 +613,18 @@ class Submit:
                 if product := cache.memcache_cache.get(f"amazon_product_{isbn_13 or b_asin}"):
                     # If not importing, return whatever data AMZ returns, even if it's unimportable.
                     cleaned_metadata = clean_amazon_metadata_for_load(product)
+                    response = {
+                        "status": "success",
+                        "hit": cleaned_metadata,
+                        **({"product": product} if include_product else {}),
+                    }
                     if not stage_import:
-                        return json.dumps({"status": "success", "hit": cleaned_metadata})
+                        return json.dumps(response)
 
                     # When importing, return a result only if the item can be imported.
                     source, pid = cleaned_metadata["source_records"][0].split(":")
                     if ImportItem.find_staged_or_pending(identifiers=[pid], sources=[source]):
-                        return json.dumps({"status": "success", "hit": cleaned_metadata})
+                        return json.dumps(response)
 
             stats.increment("ol.affiliate.amazon.total_items_not_found")
 

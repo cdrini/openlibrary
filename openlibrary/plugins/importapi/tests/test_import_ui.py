@@ -3,11 +3,23 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from lxml import etree
 
+from openlibrary.catalog.marc.marc_binary import MarcBinary
+from openlibrary.catalog.marc.marc_xml import MarcXml
 from openlibrary.plugins.importapi import import_ui
-from openlibrary.plugins.importapi.import_ui import GutenbergMetadataProvider, ImportPreviewRequest, RawJsonMetadataProvider
+from openlibrary.plugins.importapi.code import IaImportRecord
+from openlibrary.plugins.importapi.import_ui import (
+    AmazonMetadataProvider,
+    GutenbergMetadataProvider,
+    IaMetadataProvider,
+    ImportPreviewRequest,
+    RawJsonMetadataProvider,
+    SourceRecord,
+)
 
 GUTENBERG_SAMPLE = Path(__file__).parents[3] / "bookworm" / "tests" / "samples" / "gutenberg.json"
+MARC_TEST_DATA = Path(__file__).parents[3] / "catalog" / "marc" / "tests" / "test_data"
 
 
 @pytest.fixture
@@ -26,7 +38,7 @@ def fetched(monkeypatch):
     session.get.side_effect = get
     monkeypatch.setattr("openlibrary.bookworm.harvest.build_session", lambda: session)
 
-    def load(rec, account_key, save):
+    def load(rec, account_key, save, from_marc_record=False):
         calls["record"] = rec
         calls["save"] = save
         return {"success": True}
@@ -67,7 +79,7 @@ def test_gutenberg_is_selectable_by_source_prefix():
 def loaded(monkeypatch):
     calls: dict = {}
 
-    def load(rec, account_key, save):
+    def load(rec, account_key, save, from_marc_record=False):
         calls["record"] = rec
         calls["save"] = save
         return {"success": True}
@@ -110,3 +122,81 @@ def test_raw_json_is_selectable_by_source_prefix():
     req = ImportPreviewRequest.from_input({"source": 'json:{"title": "a:b"}'})
     assert isinstance(req.metadata_provider, RawJsonMetadataProvider)
     assert req.identifier == '{"title": "a:b"}'
+
+
+def test_gutenberg_fetch_keeps_the_raw_publication(fetched):
+    source = GutenbergMetadataProvider().fetch("67979")
+
+    assert source.raw_metadata == json.loads(GUTENBERG_SAMPLE.read_text())[0]
+    assert source.import_record["source_records"] == ["project_gutenberg:67979"]
+    assert source.marc_record is None
+
+
+def test_raw_json_fetch_keeps_the_pasted_record():
+    rec = {
+        "title": "A Book",
+        "authors": [{"name": "Some Author"}],
+        "publish_date": "2001",
+        "publishers": ["Pub"],
+        "source_records": ["test:123"],
+    }
+
+    source = RawJsonMetadataProvider().fetch(json.dumps(rec))
+
+    assert source.raw_metadata == rec
+    assert source.import_record["title"] == "A Book"
+
+
+def test_amazon_fetch_keeps_the_product(monkeypatch):
+    hit = {"title": "A Book", "source_records": ["amazon:059035342X"]}
+    product = {**hit, "price": "$5.10"}
+    monkeypatch.setattr(import_ui, "get_amazon_metadata_and_product", lambda id_, id_type: (hit, product))
+
+    source = AmazonMetadataProvider().fetch("059035342X")
+
+    assert source.import_record == hit
+    assert source.raw_metadata == product
+
+
+def test_ia_fetch_keeps_the_item_metadata_and_marc(monkeypatch):
+    from openlibrary.plugins.importapi.code import ia_importapi
+
+    marc = MarcBinary((MARC_TEST_DATA / "bin_input" / "0descriptionofta1682unit_meta.mrc").read_bytes())
+    metadata = {"identifier": "foo", "title": "A Book", "_filenames": ["foo_meta.mrc", "foo.pdf"]}
+    monkeypatch.setattr(
+        ia_importapi,
+        "get_ia_import_record",
+        lambda *a, **kw: IaImportRecord({"title": "A Book"}, True, metadata, marc),
+    )
+
+    source = IaMetadataProvider().fetch("foo")
+
+    assert source.raw_metadata == {"identifier": "foo", "title": "A Book"}
+    assert source.from_marc_record is True
+    assert source.marc_text() == marc.data.decode("utf-8")
+    assert str(source.marc_html_record().leader) == marc.leader()
+
+
+def test_marc_xml_is_shown_as_xml():
+    root = etree.parse(str(MARC_TEST_DATA / "xml_input" / "0descriptionofta1682unit_marc.xml")).getroot()
+    source = SourceRecord({}, marc_record=MarcXml(root))
+
+    assert source.marc_html_record() is None
+    assert source.marc_text().lstrip().startswith("<")
+
+
+def test_load_does_not_change_the_shown_import_record(monkeypatch):
+    calls: dict = {}
+
+    def load(rec, account_key, save, from_marc_record=False):
+        calls["from_marc_record"] = from_marc_record
+        rec["title"] = "changed by load"
+        return {"success": True}
+
+    monkeypatch.setattr(import_ui.add_book, "load", load)
+    source = SourceRecord({"title": "A Book"}, from_marc_record=True)
+
+    RawJsonMetadataProvider().load(source, save=False)
+
+    assert source.import_record == {"title": "A Book"}
+    assert calls["from_marc_record"] is True

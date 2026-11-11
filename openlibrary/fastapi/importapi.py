@@ -37,9 +37,16 @@ def _build_preview_response(
 
     with web_ctx_ip(client_ip):
         try:
-            return dict(req.metadata_provider.do_import(req.identifier, req.save))
+            source_record = req.metadata_provider.fetch(req.identifier)
+            result = dict(req.metadata_provider.load(source_record, req.save))
         except ValueError as e:
             return {"success": False, "error": str(e)}
+    return {
+        **result,
+        "raw_metadata": source_record.raw_metadata,
+        "raw_marc": source_record.marc_text(),
+        "import_record": source_record.import_record,
+    }
 
 
 @router.get("/import/preview.json")

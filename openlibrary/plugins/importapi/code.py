@@ -3,7 +3,7 @@
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 import lxml.etree
 import web
@@ -42,6 +42,15 @@ logger = logging.getLogger("openlibrary.importapi")
 
 class DataError(ValueError):
     pass
+
+
+class IaImportRecord(NamedTuple):
+    import_record: dict
+    from_marc_record: bool
+    # What the import record was built from: the item's metadata, and its MARC
+    # record if it has one.
+    metadata: dict
+    marc_record: MarcBinary | MarcXml | None
 
 
 class BookImportError(Exception):
@@ -246,7 +255,7 @@ class ia_importapi(importapi):
         force_import: bool = False,
         preview: bool = False,
     ) -> str:
-        import_record, from_marc_record = cls.get_ia_import_record(
+        import_record, from_marc_record, _, _ = cls.get_ia_import_record(
             identifier,
             require_marc=require_marc,
             force_import=force_import,
@@ -266,7 +275,7 @@ class ia_importapi(importapi):
         require_marc: bool = True,
         force_import: bool = False,
         preview: bool = False,
-    ) -> tuple[dict, bool]:
+    ) -> IaImportRecord:
         """
         Performs logic to fetch archive.org item + metadata,
         produces a data dict, then loads into Open Library
@@ -274,7 +283,7 @@ class ia_importapi(importapi):
         :param str identifier: archive.org ocaid
         :param bool require_marc: require archive.org item have MARC record?
         :param bool force_import: force import of this record
-        :returns: the data of the imported book or raises  BookImportError
+        :returns: the data of the imported book, and what it was built from, or raises BookImportError
         """
         from_marc_record = False
 
@@ -313,7 +322,7 @@ class ia_importapi(importapi):
         # Add IA specific fields: ocaid, source_records, and cover
         cls.populate_edition_data(import_record, identifier)
 
-        return import_record, from_marc_record
+        return IaImportRecord(import_record, from_marc_record, metadata, marc_record)
 
     def POST(self):
         web.header("Content-Type", "application/json")

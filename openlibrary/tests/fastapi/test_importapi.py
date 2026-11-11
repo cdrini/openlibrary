@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from openlibrary.plugins.importapi.import_ui import SourceRecord
 from openlibrary.utils.request_context import RequestContextVars, req_context, site
 
 
@@ -15,6 +16,7 @@ FAKE_IMPORT_RESULT = {
     "edition": {"key": "/books/OL1M", "title": "Test Book"},
     "success": True,
 }
+FAKE_SOURCE = SourceRecord({"title": "Test Book"}, raw_metadata={"asin": "ASIN123"})
 
 
 @pytest.fixture(autouse=True)
@@ -60,7 +62,8 @@ def mock_import_request():
 
     def _make(save: bool = False):
         mock_req = MagicMock()
-        mock_req.metadata_provider.do_import.return_value = FAKE_IMPORT_RESULT
+        mock_req.metadata_provider.fetch.return_value = FAKE_SOURCE
+        mock_req.metadata_provider.load.return_value = FAKE_IMPORT_RESULT
         mock_req.save = save
         return mock_req
 
@@ -135,6 +138,9 @@ class TestImportPreviewGet:
         data = response.json()
         assert data["success"] is True
         assert data["edition"]["key"] == "/books/OL1M"
+        assert data["raw_metadata"] == {"asin": "ASIN123"}
+        assert data["raw_marc"] is None
+        assert data["import_record"] == {"title": "Test Book"}
 
     def test_get_does_not_save(self):
         captured = {}
@@ -142,7 +148,8 @@ class TestImportPreviewGet:
         def fake_from_input(i):
             captured["save"] = i.get("save", "false")
             mock_req = MagicMock()
-            mock_req.metadata_provider.do_import.return_value = FAKE_IMPORT_RESULT
+            mock_req.metadata_provider.fetch.return_value = FAKE_SOURCE
+            mock_req.metadata_provider.load.return_value = FAKE_IMPORT_RESULT
             mock_req.save = False
             return mock_req
 
@@ -171,7 +178,8 @@ class TestImportPreviewGet:
         def fake_from_input(i):
             captured["params"] = i
             mock_req = MagicMock()
-            mock_req.metadata_provider.do_import.return_value = FAKE_IMPORT_RESULT
+            mock_req.metadata_provider.fetch.return_value = FAKE_SOURCE
+            mock_req.metadata_provider.load.return_value = FAKE_IMPORT_RESULT
             mock_req.save = False
             return mock_req
 
@@ -218,7 +226,8 @@ class TestImportPreviewPost:
         def fake_from_input(i):
             captured["save"] = i.get("save", "false")
             mock_req = MagicMock()
-            mock_req.metadata_provider.do_import.return_value = FAKE_IMPORT_RESULT
+            mock_req.metadata_provider.fetch.return_value = FAKE_SOURCE
+            mock_req.metadata_provider.load.return_value = FAKE_IMPORT_RESULT
             mock_req.save = captured["save"] == "true"
             return mock_req
 
@@ -239,7 +248,8 @@ class TestImportPreviewPost:
         def fake_from_input(i):
             captured["save"] = i.get("save", "false")
             mock_req = MagicMock()
-            mock_req.metadata_provider.do_import.return_value = FAKE_IMPORT_RESULT
+            mock_req.metadata_provider.fetch.return_value = FAKE_SOURCE
+            mock_req.metadata_provider.load.return_value = FAKE_IMPORT_RESULT
             return mock_req
 
         self.monkeypatch.setattr(

@@ -1,7 +1,7 @@
 import importlib
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,6 +12,7 @@ from openlibrary.core.vendors import (
     betterworldbooks_fmt,
     clean_amazon_metadata_for_load,
     get_amazon_metadata,
+    get_amazon_metadata_and_product,
     get_amazon_metadata_async,
     is_dvd,
     split_amazon_title,
@@ -967,3 +968,39 @@ def test_amazon_affiliate_url_prefers_identifiers_over_query() -> None:
     isbn_979_url = amazon_affiliate_url("9798776159572", None, "test-tag", query="Pickleball Soap Opera")
     assert isbn_979_url is not None
     assert "/s?k=9798776159572" in isbn_979_url
+
+
+@pytest.mark.parametrize(
+    ("id_", "id_type", "requested"),
+    [
+        ("9780590353427", "isbn", "059035342X"),
+        ("978-0-590-35342-7", "isbn", "059035342X"),
+        ("9791234567896", "isbn", "9791234567896"),
+        ("B000FC0SIM", "asin", "B000FC0SIM"),
+    ],
+)
+def test_get_amazon_metadata_and_product(id_, id_type, requested) -> None:
+    hit = {"title": "A Book", "source_records": [f"amazon:{requested}"]}
+    product = {**hit, "price": "$5.10"}
+    response = MagicMock()
+    response.json.return_value = {"status": "success", "hit": hit, "product": product}
+
+    with (
+        patch("openlibrary.core.vendors.session.get", return_value=response) as get,
+        patch("openlibrary.core.vendors.affiliate_server_url", new="affiliate"),
+    ):
+        assert get_amazon_metadata_and_product(id_, id_type=id_type) == (hit, product)
+
+    url = get.call_args.args[0]
+    assert url.startswith(f"http://affiliate/isbn/{requested}?")
+    assert "stage_import=false" in url
+    assert "include_product=true" in url
+
+
+def test_get_amazon_metadata_and_product_rejects_bad_isbns() -> None:
+    with (
+        patch("openlibrary.core.vendors.session.get") as get,
+        patch("openlibrary.core.vendors.affiliate_server_url", new="affiliate"),
+    ):
+        assert get_amazon_metadata_and_product("not an isbn") == (None, None)
+    get.assert_not_called()

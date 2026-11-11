@@ -37,6 +37,5 @@ $var title: $title
     $if not record:
         <p>$_("Invalid MARC record.")</p>
     $else:
-        <p><b>$_("LEADER:")</b> <code>$record.leader</code><br/>
-        $:record.html()</p>
+        $:macros.MarcRecord(record)
 </div>

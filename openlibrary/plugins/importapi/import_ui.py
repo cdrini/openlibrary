@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 from dataclasses import dataclass
@@ -5,14 +6,17 @@ from typing import Literal, cast, override
 
 import requests
 import web
+from lxml import etree
 
 from infogami.utils import delegate
 from infogami.utils.flash import add_flash_message
 from infogami.utils.template import render_template
 from openlibrary.catalog import add_book
+from openlibrary.catalog.marc.html import html_record
 from openlibrary.catalog.marc.marc_binary import MarcBinary
+from openlibrary.catalog.marc.marc_xml import MarcXml
 from openlibrary.catalog.marc.parse import read_edition
-from openlibrary.core.vendors import get_amazon_metadata
+from openlibrary.core.vendors import get_amazon_metadata_and_product
 from openlibrary.utils.request_context import site
 
 
@@ -49,11 +53,13 @@ class import_preview(delegate.page):
             add_flash_message("error", str(e))
             return render_template("import_preview.html", metadata_provider_factory)
 
+        source = None
         try:
-            result = req.metadata_provider.do_import(req.identifier, req.save)
+            source = req.metadata_provider.fetch(req.identifier)
+            result = req.metadata_provider.load(source, req.save)
         except ValueError as e:
             add_flash_message("error", str(e))
-            return render_template("import_preview.html", metadata_provider_factory, req=req)
+            return render_template("import_preview.html", metadata_provider_factory, req=req, source=source)
 
         if req.save:
             add_flash_message("success", "Import successful")
@@ -64,6 +70,7 @@ class import_preview(delegate.page):
                 metadata_provider_factory,
                 req=req,
                 result=result,
+                source=source,
             )
 
 
@@ -103,13 +110,53 @@ class ImportPreviewRequest:
         )
 
 
+@dataclass
+class SourceRecord:
+    """A provider's raw metadata, and the import record built from it."""
+
+    import_record: dict
+    # The source's data before it was turned into an import record
+    raw_metadata: dict | None = None
+    marc_record: MarcBinary | MarcXml | None = None
+    from_marc_record: bool = False
+
+    def marc_text(self) -> str | None:
+        """The MARC record as it was fetched: binary MARC, or MARC XML."""
+        if isinstance(self.marc_record, MarcBinary):
+            return self.marc_record.data.decode("utf-8", errors="replace")
+        if isinstance(self.marc_record, MarcXml):
+            return etree.tostring(self.marc_record.record, encoding="unicode", pretty_print=True)
+        return None
+
+    def marc_html_record(self) -> html_record | None:
+        """Binary MARC, for rendering as on /show-records/ pages."""
+        if isinstance(self.marc_record, MarcBinary):
+            try:
+                return html_record(self.marc_record.data)
+            except AssertionError, ValueError:
+                return None
+        return None
+
+
 class AbstractMetadataProvider:
     full_name: str
     id_name: str
 
-    def do_import(self, identifier: str, save: bool):
-        """Import metadata from the source."""
-        raise NotImplementedError(f"do_import method not implemented for {self.__class__.__name__}")
+    def fetch(self, identifier: str) -> SourceRecord:
+        """Fetch the source's metadata and build an import record from it."""
+        raise NotImplementedError(f"fetch method not implemented for {self.__class__.__name__}")
+
+    def load(self, source: SourceRecord, save: bool) -> dict:
+        return add_book.load(
+            # load() modifies the record, and the caller may still show it
+            copy.deepcopy(source.import_record),
+            account_key="account/ImportBot",
+            from_marc_record=source.from_marc_record,
+            save=save,
+        )
+
+    def do_import(self, identifier: str, save: bool) -> dict:
+        return self.load(self.fetch(identifier), save)
 
 
 class AmazonMetadataProvider(AbstractMetadataProvider):
@@ -117,15 +164,11 @@ class AmazonMetadataProvider(AbstractMetadataProvider):
     id_name = "amazon"
 
     @override
-    def do_import(self, identifier: str, save: bool):
+    def fetch(self, identifier: str) -> SourceRecord:
         id_type: Literal["asin", "isbn"] = "isbn" if identifier[0].isdigit() else "asin"
-        import_record = get_amazon_metadata(id_=identifier, id_type=id_type, high_priority=True, stage_import=False)
+        import_record, product = get_amazon_metadata_and_product(id_=identifier, id_type=id_type)
         assert import_record, "No metadata found for the given identifier"
-        return add_book.load(
-            import_record,
-            account_key="account/ImportBot",
-            save=save,
-        )
+        return SourceRecord(import_record, raw_metadata=product)
 
 
 class IaMetadataProvider(AbstractMetadataProvider):
@@ -133,22 +176,23 @@ class IaMetadataProvider(AbstractMetadataProvider):
     id_name = "ia"
 
     @override
-    def do_import(self, identifier: str, save: bool):
+    def fetch(self, identifier: str) -> SourceRecord:
         # This appears to be causing a circular dependency... only in tests?
         from openlibrary.plugins.importapi.code import ia_importapi
 
-        import_record, from_marc_record = ia_importapi.get_ia_import_record(
+        import_record, from_marc_record, metadata, marc_record = ia_importapi.get_ia_import_record(
             identifier,
             require_marc=False,
             force_import=True,
-            preview=not save,
+            preview=True,
         )
         assert import_record, "No metadata found for the given identifier"
-        return add_book.load(
+        return SourceRecord(
             import_record,
-            account_key="account/ImportBot",
+            # _filenames lists the item's files, which OL adds to the item metadata
+            raw_metadata={k: v for k, v in metadata.items() if k != "_filenames"},
+            marc_record=marc_record,
             from_marc_record=from_marc_record,
-            save=save,
         )
 
 
@@ -157,7 +201,7 @@ class RawMarcMetadataProvider(AbstractMetadataProvider):
     id_name = "marc"
 
     @override
-    def do_import(self, identifier: str, save: bool):
+    def fetch(self, identifier: str) -> SourceRecord:
         # The "ID" is a url, with a byte offset for the start of the MARC record.
         # Example: "https://archive.org/download/harvard_bibliographic_metadata/20220215_007.bib.mrc:35217689"
         url, offset = identifier.rsplit(":", 1)
@@ -179,12 +223,7 @@ class RawMarcMetadataProvider(AbstractMetadataProvider):
         if "source_records" not in import_record:
             import_record["source_records"] = [f"marc:{url}:{offset}:{length}"]
 
-        return add_book.load(
-            import_record,
-            account_key="account/ImportBot",
-            from_marc_record=True,
-            save=save,
-        )
+        return SourceRecord(import_record, marc_record=marc_record, from_marc_record=True)
 
 
 class GutenbergMetadataProvider(AbstractMetadataProvider):
@@ -198,7 +237,7 @@ class GutenbergMetadataProvider(AbstractMetadataProvider):
     ID_RE = re.compile(r"^(?:https?://(?:www\.)?gutenberg\.org/ebooks/)?(\d+)/?$")
 
     @override
-    def do_import(self, identifier: str, save: bool):
+    def fetch(self, identifier: str) -> SourceRecord:
         from openlibrary.bookworm import opds
         from openlibrary.bookworm.harvest import build_session
 
@@ -208,14 +247,11 @@ class GutenbergMetadataProvider(AbstractMetadataProvider):
 
         response = build_session().get(self.PUBLICATION_URL.format(match[1]), timeout=20)
         response.raise_for_status()
+        publication = response.json()
         feed = opds.Feed(provider_name=self.id_name, id_strategy="gutenberg")
-        import_record = opds.to_import_record(opds.Publication(**response.json()), feed)
+        import_record = opds.to_import_record(opds.Publication(**publication), feed)
         assert import_record, "No metadata found for the given identifier"
-        return add_book.load(
-            import_record,
-            account_key="account/ImportBot",
-            save=save,
-        )
+        return SourceRecord(import_record, raw_metadata=publication)
 
 
 class RawJsonMetadataProvider(AbstractMetadataProvider):
@@ -223,7 +259,7 @@ class RawJsonMetadataProvider(AbstractMetadataProvider):
     id_name = "json"
 
     @override
-    def do_import(self, identifier: str, save: bool):
+    def fetch(self, identifier: str) -> SourceRecord:
         # Avoids the same circular import as IaMetadataProvider.
         from openlibrary.plugins.importapi.code import json_edition_builder
 
@@ -235,11 +271,7 @@ class RawJsonMetadataProvider(AbstractMetadataProvider):
             raise ValueError("The import record must be a JSON object")
         # Built like a JSON POST to /api/import, so the preview shows what that would do.
         import_record = json_edition_builder(obj).get_dict()
-        return add_book.load(
-            import_record,
-            account_key="account/ImportBot",
-            save=save,
-        )
+        return SourceRecord(import_record, raw_metadata=obj)
 
 
 class MetadataProviderFactory:
