@@ -11,6 +11,8 @@ ci:
   # Renovate keeps hook revs updated (see renovate.json). pre-commit.ci can't turn its autoupdate off
   # (pre-commit-ci/issues#83), so run it rarely; its PRs can be closed.
   autoupdate_schedule: "quarterly"
+  # pre-commit.ci has no uv or network to install the app's deps; CI's test_fastapi_routes.py catches a stale file.
+  skip: [generate-fastapi-routes]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -237,6 +239,17 @@ repos:
         - fastapi==0.143.0 # annoyingly, these three needed to be added when we started using contextvars in i18n files
         - simplejson==3.20.2
         - requests==2.34.2
+
+  - repo: local
+    hooks:
+    - id: generate-fastapi-routes
+      name: Generate FastAPI routes
+      description: This hook regenerates conf/k8s/fastapi-routes.yaml, the routes the gateway sends to FastAPI.
+      # Importing the app needs all of its deps, so this runs the same uv command as `make test-py-uv`.
+      entry: uv run --with-requirements requirements_test.txt python -m scripts.generate_fastapi_routes
+      files: ^(openlibrary/fastapi/.*\.py|openlibrary/asgi_app\.py|scripts/generate_fastapi_routes\.py|conf/k8s/fastapi-routes\.yaml)$
+      language: system
+      pass_filenames: false
 
   - repo: local
     hooks:

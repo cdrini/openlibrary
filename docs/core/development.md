@@ -108,6 +108,8 @@ git commit -n                                  # skip hooks for one commit
 
 pre-commit runs: `mypy`, `black`, `ruff`, JS lint, Stylelint. Python version must match `default_language_version` in `.pre-commit-config.yaml` — use `pyenv` if your system Python doesn't match.
 
+The `generate-fastapi-routes` hook, which rewrites `conf/k8s/fastapi-routes.yaml` when FastAPI routes may have changed, also needs [`uv`](https://docs.astral.sh/uv/) and the same system packages as `make test-py-uv` (a C compiler, Python headers and `libpq-dev` to build `psycopg2`). Its first run downloads `requirements_test.txt` (~150MB); later runs reuse uv's cache and take a few seconds.
+
 **Rendering a real Templetor/web.py template against the actual dev DB (not the `render_template` pytest fixture's mocks).** The `render_template` fixture in `openlibrary/conftest.py` is great for template-syntax/output tests, but it does not connect to a real infobase. For a one-off script (e.g. to prove an escaping fix with a real payload, or to seed/inspect real dev-DB state — accounts, lists, preferences — for a review's Playwright setup) that needs the *actual* running infobase behind `docker compose`, wire it up like this instead, run via `docker compose run --rm --no-deps home python your_script.py` (with `OL_MOUNT_DIR="$(pwd)"` so it sees your worktree's code):
 
 ```python
