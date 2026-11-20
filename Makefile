@@ -9,7 +9,7 @@ COMPONENTS_DIR=openlibrary/components
 OSP_DUMP_LOCATION=/solr-updater-data/osp_totals.db
 
 
-.PHONY: all clean distclean git css js components lit-components icons i18n lint frontend test test-py test-py-uv test-py-integration test-i18n
+.PHONY: all clean distclean git css js components lit-components icons i18n i18n-pull lint frontend test test-py test-py-uv test-py-integration test-i18n
 
 all: git frontend i18n
 
@@ -42,6 +42,11 @@ icons:
 	node scripts/build_icon_sprite.mjs
 
 i18n:
+	python ./scripts/i18n-messages compile
+
+# Translations live in openlibrary-i18n; fetch them, then compile
+i18n-pull:
+	./scripts/i18n-pull-translations.sh
 	python ./scripts/i18n-messages compile
 
 git:

@@ -6,6 +6,8 @@ openlibrary/components/dev/_dev.js
 .vscode/
 *.swp
 *.mo
+# Pulled from openlibrary-i18n by scripts/i18n-pull-translations.sh (make i18n-pull)
+openlibrary/i18n/*/messages.po
 var/
 usr/
 static/build/

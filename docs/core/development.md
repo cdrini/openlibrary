@@ -89,6 +89,9 @@ docker compose exec web npm run lint:fix
 
 # Regenerate i18n POT
 docker compose run --rm home python ./scripts/i18n-messages extract
+
+# Fetch and compile translations from openlibrary-i18n (otherwise the dev site is English-only)
+docker compose run --rm home make i18n-pull
 ```
 
 **Running vitest on the host (outside Docker), e.g. in a fresh worktree.** Verified 2026-09-28 on #13745 [PR lead auto-assign]. Three traps, each of which fails quietly or blames the wrong thing:

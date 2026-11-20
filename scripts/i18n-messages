@@ -84,10 +84,10 @@ def main(cmd, args):
         results = i18n.install_translations(source)
 
         rejected = {locale: errors for locale, errors in results.items() if errors}
-        lines = [f"{locale}\t{'kept committed' if errors else 'installed'}" for locale, errors in results.items()]
+        lines = [f"{locale}\t{'rejected' if errors else 'installed'}" for locale, errors in results.items()]
         print("\n".join(lines))
         for locale, errors in rejected.items():
-            print(f"REJECTED {locale}: keeping the committed messages.po", file=sys.stderr)
+            print(f"REJECTED {locale}: not installed", file=sys.stderr)
             for e in errors:
                 print(f"    {e}", file=sys.stderr)
         if manifest:

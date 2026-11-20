@@ -189,7 +189,7 @@ No runtime env vars. Translation files under `openlibrary/i18n/<lang>/` are comp
 **Strings flow (current, post-migration):** OL source → `messages.pot` → the `openlibrary-i18n`
 store, where translations are AI-generated on each `.pot` change (humans correct via Weblate) →
 `olbase` pulls `openlibrary-i18n` at image build and compiles to `.mo` → served per-request. The
-authoritative source is `openlibrary-i18n`, not the `.po` files committed in `openlibrary`. See
+authoritative source is `openlibrary-i18n`; `openlibrary` commits no `.po` files. See
 [i18n-pipeline](i18n-pipeline.md) for the full flow. *(This replaced the older POEditor-based management flow.)*
 
 ---

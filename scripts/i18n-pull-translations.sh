@@ -1,7 +1,7 @@
 #!/bin/bash
-# Fetch openlibrary-i18n at REF and install each locale's messages.po over the
-# committed one, if it is safe to ship (see openlibrary.i18n.install_translations).
-# A locale that fails keeps its committed file; pass --strict to exit 1 instead.
+# Fetch openlibrary-i18n at REF and install each locale's messages.po, if it is
+# safe to ship (see openlibrary.i18n.install_translations). A locale that fails is
+# not installed, so it renders in English; pass --strict to exit 1 instead.
 #
 # docker/Dockerfile.olbase and the i18n_upstream CI job both run this script, so CI
 # exercises the same pull and gate. CI runs on openlibrary PRs against the current
@@ -13,7 +13,7 @@
 #   I18N_REPO env var overrides the repository URL (e.g. a local clone for testing)
 #
 # Writes openlibrary/i18n/openlibrary-i18n.txt: the ref, the resolved SHA, and
-# whether each locale was installed or kept committed.
+# whether each locale was installed or rejected.
 set -euo pipefail
 
 REPO=${I18N_REPO:-https://github.com/internetarchive/openlibrary-i18n}

@@ -164,8 +164,8 @@ jobs:
           docker manifest annotate openlibrary/olbase:${GITHUB_SHA::12} openlibrary/olbase@${ARM64_DIGEST}
           docker manifest push openlibrary/olbase:${GITHUB_SHA::12}
 
-  # Report which locales the image kept at their committed .po because the
-  # openlibrary-i18n file was rejected. Reads the manifest from the pushed amd64
+  # Report which locales the image left out because their openlibrary-i18n file
+  # was rejected, so they render in English. Reads the manifest from the pushed amd64
   # image (both arches run the same script on the same SHA). Informational only:
   # it cannot fail the build.
   translations-summary:
@@ -180,7 +180,7 @@ jobs:
         run: |
           manifest=$(docker run --rm --entrypoint cat "$IMAGE" /openlibrary/openlibrary/i18n/openlibrary-i18n.txt)
           { echo '### openlibrary-i18n translations baked into olbase'; echo '```'; echo "$manifest"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          kept=$(echo "$manifest" | awk -F'\t' '$2 == "kept committed" {print $1}' | xargs)
-          if [ -n "$kept" ]; then
-            echo "::warning title=Translations kept at committed .po::$kept (openlibrary-i18n file rejected; see build log for why)"
+          rejected=$(echo "$manifest" | awk -F'\t' '$2 == "rejected" {print $1}' | xargs)
+          if [ -n "$rejected" ]; then
+            echo "::warning title=Translations rejected::$rejected (openlibrary-i18n file rejected, so these render in English; see build log for why)"
           fi

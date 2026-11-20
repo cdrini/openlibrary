@@ -14,7 +14,7 @@ translations, and which one you touch depends on what you are doing.
 | | |
 |---|---|
 | **Authoritative source** | `internetarchive/openlibrary-i18n`, branch **`main`** |
-| **Where the running code reads from** | `internetarchive/openlibrary`, `openlibrary/i18n/<lang>/messages.po` — populated at image build by the bake (below), not hand-edited |
+| **Where the running code reads from** | `openlibrary/i18n/<lang>/messages.mo`, compiled from `.po` files pulled from `openlibrary-i18n` at image build (below). No `.po` files are committed in `openlibrary`; locally, `make i18n-pull` fetches them. |
 
 ⚠️ **`openlibrary-i18n`'s default branch is `main`, not `master`.** Branching off `origin/master`
 there silently fails.
@@ -60,10 +60,10 @@ and self-merges → the result is baked into the deploy image.** Each is a real,
    clones `openlibrary-i18n` at build time (via
    [`scripts/i18n-pull-translations.sh`](https://github.com/internetarchive/openlibrary/blob/master/scripts/i18n-pull-translations.sh))
    at a pinned ref **`I18N_REF`** (default `main` = always-latest), copies each
-   `locale/<lang>/messages.po` over the committed files, and `make i18n` compiles them to `.mo`.
+   `locale/<lang>/messages.po` into `openlibrary/i18n/<lang>/`, and `make i18n` compiles them to `.mo`.
    `deploy.sh` blocks a deploy until `olbase` is rebuilt, so **production serves the freshest
-   translations with no manual copying.** A bad/missing language safely falls back to the committed
-   file; a pinned `I18N_REF` ships an exact, verified set. The baked set is recorded in the image at
+   translations with no manual copying.** A language whose file fails the safety check is left out
+   and renders in English; a pinned `I18N_REF` ships an exact, verified set. The baked set is recorded in the image at
    `openlibrary/i18n/openlibrary-i18n.txt` (ref + per-locale installed/kept).
 
 **Human contributions** come in through a shared self-hosted **Weblate** instance at [openlibrary.org/translate](https://openlibrary.org/translate) (openlibrary-i18n#116):
@@ -141,11 +141,12 @@ its `openlibrary-i18n` fuzzy entries are not translations of their msgid at all:
 
 A merge tool would silently bless every one of these.
 
-### 3. "Delete the `.po` files" is not a cleanup. It destroys thousands of translations.
+### 3. Local dev pulls translations; it does not get them from the image.
 
-And it breaks local dev regardless: `OL_MOUNT_DIR` volume-mounts `openlibrary/i18n/` over
-whatever `olbase` baked in, so removing the committed files leaves local dev with **no**
-translations. A `make i18n-sync` or equivalent has to exist first.
+`OL_MOUNT_DIR` volume-mounts the checkout over `/openlibrary`, hiding what `olbase` baked in.
+`openlibrary` commits no `.po` files, so a dev stack renders English until you run
+`docker compose run --rm home make i18n-pull`, which fetches `openlibrary-i18n` `main` into the
+(git-ignored) `openlibrary/i18n/<lang>/messages.po` and compiles them.
 
 ---
 
@@ -188,15 +189,15 @@ The base image `Dockerfile.olbase` bakes translations at build time:
   named→positional (renders a dict repr), unknown names, and `%(x)` followed by a non-conversion
   character. **It does not catch** `%(name)d` for a `%(name)s` msgid (raises only if the runtime
   value is a str, which the `.po` can't tell you), or dropped named placeholders (they don't raise).
-- **Failure semantics:** a locale that fails the gate keeps its **committed** `.po` (fallback),
-  including any defect already in it. A fetch failure, bad ref, or empty `locale/` fails the build.
+- **Failure semantics:** a locale that fails the gate is not installed, so it renders in English.
+  A fetch failure, bad ref, or empty `locale/` fails the build.
 - **Record:** `openlibrary/i18n/openlibrary-i18n.txt` in the image holds the ref, the resolved SHA,
-  and `installed` / `kept committed` per locale.
+  and `installed` / `rejected` per locale.
 - **CI:** the `i18n_upstream` job in `python_tests.yml` runs the same script with `--strict`, then
   `make i18n`, `make test-i18n` and `test_po_files.py` on the pulled files.
 - **`olbase.yaml`:** the `i18n-ref` job resolves the SHA once for both architectures
   (`workflow_dispatch` input `i18n_ref` pins a last-good commit). `translations-summary` puts the
-  manifest in the step summary and warns on any kept locale.
+  manifest in the step summary and warns on any rejected locale.
 - **Why it doesn't reuse `validate_translations()`:** that function counts an error only when the
   same entry also has a (fuzzy) warning. So errors on shipped strings never count, and a gate built
   on it would agree with everything.
@@ -210,6 +211,9 @@ answers *"if olbase baked openlibrary-i18n@X, what would get worse?"* It fetches
 HTTPS at a full SHA (no checkout needed), compiles both sides with `write_mo` (default
 `use_fuzzy=False`), loads via `babel.support.Translations`, keys on `(msgctxt, msgid)`, and limits to
 msgids in openlibrary's `messages.pot`. Exit codes: 0 clean, 1 gating findings, 2 could not run.
+CI passes `--shipped-ref <i18n ref>` (the commit a change lands on), so the translations it
+compares against are openlibrary-i18n's as production already serves them; `openlibrary` commits
+no `.po` files to compare against.
 
 - **Gates:** regressions to English, and placeholder defects that openlibrary's version of the same
   entry does not have. Reported without gating: all placeholder defects, and unreachable plural forms.

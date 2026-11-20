@@ -92,8 +92,8 @@ COPY --chown=openlibrary:openlibrary . /openlibrary
 # olbase.yaml always passes I18N_REF (resolved to one SHA for both architectures), so
 # to pin a release, use its i18n_ref input; changing this default does not affect it.
 # Locally, the default `main` lets Docker reuse a cached layer: pass a SHA to refresh.
-# A locale whose .po would break the build or crash a render keeps its committed file;
-# the resolved SHA and each locale's outcome are written to
+# A locale whose .po would break the build or crash a render is not installed (so it
+# renders in English); the resolved SHA and each locale's outcome are written to
 # openlibrary/i18n/openlibrary-i18n.txt.
 ARG I18N_REF=main
 

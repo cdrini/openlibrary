@@ -50,10 +50,6 @@ jobs:
         run: |
           uv pip install -r requirements_test.txt
       - run: make git
-      - name: Run make i18n
-        run: |
-          make i18n
-          make test-i18n
       - name: Run tests
         run: |
           git fetch --no-tags --prune --depth=1 origin master
@@ -72,8 +68,8 @@ jobs:
           [ "$integration_status" -eq 0 ] || echo "::error::Integration tests failed (exit $integration_status); see the 'Integration tests' group above"
           [ "$unit_status" -eq 0 ] && [ "$integration_status" -eq 0 ]
 
-  # Runs the i18n checks against the .po files olbase will bake from openlibrary-i18n
-  # (via the same script docker/Dockerfile.olbase runs), not the ones committed here.
+  # Runs the i18n checks against the .po files olbase will bake from openlibrary-i18n,
+  # via the same script docker/Dockerfile.olbase runs.
   i18n_upstream:
     runs-on: ubuntu-24.04 # Pinned for Python 3.14.5; see python_tests above.
     timeout-minutes: 15
