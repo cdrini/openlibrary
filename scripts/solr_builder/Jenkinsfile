@@ -12,6 +12,7 @@ pipeline {
   }
   parameters {
     booleanParam(name: 'WIPE_OLD_POSTGRES', defaultValue: false, description: 'If true, removes the current postgres. Otherwise assumes a postgres is already filled and running')
+    booleanParam(name: 'EXPORT_IA_METADATA', defaultValue: true, description: 'If true (and WIPE_OLD_POSTGRES), exports archive.org metadata into postgres so indexing needs far fewer archive.org lookups')
     booleanParam(name: 'WIPE_OLD_SOLR', defaultValue: false, description: 'If true, removes the current solr')
     booleanParam(name: 'INDEX_WORKS', defaultValue: true, description: 'If true, reindexes works into solr')
     booleanParam(name: 'INDEX_ORPHANS', defaultValue: true, description: 'If true, reindexes orphans into solr')
@@ -28,6 +29,8 @@ pipeline {
     JENKINS_HOME_DIR = sh(script: "docker volume inspect --format='{{.Mountpoint}}' jenkins-data", returnStdout: true).trim()
     // Where to save dumps
     DUMP_DIR = '/storage/openlibrary'
+    // Output of solr_builder/ia_export.py
+    IA_METADATA_FILE = '/storage/openlibrary/ia_metadata.tsv.gz'
     // The location of the repo on the host machine; needed for docker-in-docker images
     HOST_SOLR_BUILDER_DIR = "${env.WORKSPACE}/scripts/solr_builder".replaceFirst('/var/jenkins_home', env.JENKINS_HOME_DIR)
   }
@@ -106,6 +109,43 @@ pipeline {
                 }
               }
             }
+            stage('Export IA metadata') {
+              when { expression { return params.EXPORT_IA_METADATA } }
+              steps {
+                dir(env.HOST_SOLR_BUILDER_DIR) {
+                  // Never import a previous run's export
+                  sh "rm -f ${env.IA_METADATA_FILE}"
+                  // A failed export only means more live archive.org lookups while
+                  // indexing, so it must not fail this stage (which wipes postgres).
+                  script {
+                    try {
+                      sh 'docker pull openlibrary/olbase:latest'
+                      sh 'docker compose build ol'
+                      sh 'mkdir -p logs'
+                      def status = sh(returnStatus: true, script: """
+                        docker compose run --name ol_run_ia_export --rm -T ol \
+                          python solr_builder/ia_export.py \
+                            ${env.IA_METADATA_FILE} \
+                            --log-file logs/ia-export.log
+                      """)
+                      if (status != 0) {
+                        echo "WARNING: IA metadata export exited with ${status}; see logs/ia-export.log.gz"
+                      }
+                    } catch (err) {
+                      echo "WARNING: IA metadata export failed: ${err}"
+                    }
+                  }
+                }
+              }
+              post {
+                always {
+                  dir(env.HOST_SOLR_BUILDER_DIR) {
+                    sh 'gzip -c logs/ia-export.log > logs/ia-export.log.gz || true'
+                    archiveArtifacts artifacts: 'logs/ia-export.log.gz', allowEmptyArchive: true
+                  }
+                }
+              }
+            }
           }
         }
         stage('Populate postgres') {
@@ -121,6 +161,18 @@ pipeline {
                     script: "docker compose exec -T db ./psql-import-simple.sh ${env.DUMP_DIR}/${env.OL_READING_LOG_FILE} reading_log")
                   sh(label: 'Import covers metadata',
                     script: "docker compose exec -T db ./psql-import-simple.sh ${env.DUMP_DIR}/${env.OL_COVERS_METADATA_FILE} cover")
+                  script {
+                    // Optional, like its export: indexing falls back to archive.org
+                    // for anything not in the table.
+                    if (params.EXPORT_IA_METADATA) {
+                      try {
+                        sh(label: 'Import IA metadata export',
+                          script: "if [ -f ${env.IA_METADATA_FILE} ]; then docker compose exec -T db ./psql-import-simple.sh ${env.IA_METADATA_FILE} ia_metadata; fi")
+                      } catch (err) {
+                        echo "WARNING: IA metadata import failed: ${err}"
+                      }
+                    }
+                  }
                 }
               }
             }
