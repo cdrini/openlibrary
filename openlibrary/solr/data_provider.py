@@ -35,6 +35,8 @@ logger = logging.getLogger("openlibrary.solr.data_provider")
 
 IA_METADATA_FIELDS = ("identifier", "boxid", "collection", "access-restricted-item")
 OCAID_PATTERN = re.compile(r"^[^\s&#?/]+$")
+# Bounds redirect-following so a redirect cycle can't loop forever.
+MAX_REDIRECT_HOPS = 3
 SUPPORTED_WORK_TAG_FIELDS = (
     "genres",
     "subgenres",
@@ -447,7 +449,16 @@ class DatabaseDataProvider(DataProvider):
                 keys.extend(a["author"]["key"] for a in doc["authors"])
             if doc and doc["type"]["key"] == "/type/edition" and doc.get("authors"):
                 keys.extend(a["key"] for a in doc["authors"])
-        self.preload_documents0(list(set(keys)))
+        keys = list(set(keys))
+        self.preload_documents0(keys)
+
+        # Works can still reference merged (redirected) authors; preload the
+        # targets so update_key can follow them without a query per author.
+        for _ in range(MAX_REDIRECT_HOPS):
+            keys = [loc for k in keys if (doc := self.cache.get(k)) and doc["type"]["key"] == "/type/redirect" and (loc := doc.get("location"))]
+            if not keys:
+                break
+            self.preload_documents0(keys)
 
     def _preload_tags(self):
         """Preloads tags (genres, etc.) for all works in the cache."""

@@ -16,7 +16,7 @@ import psycopg2
 from openlibrary.core.bookshelves import Bookshelves
 from openlibrary.core.ratings import Ratings, WorkRatingsSummary
 from openlibrary.solr import update
-from openlibrary.solr.data_provider import DataProvider, WorkReadingLogSolrSummary
+from openlibrary.solr.data_provider import MAX_REDIRECT_HOPS, DataProvider, WorkReadingLogSolrSummary
 from openlibrary.solr.update import load_configs, update_keys
 from openlibrary.utils.open_syllabus_project import set_osp_dump_location
 
@@ -193,7 +193,25 @@ class LocalPostgresDataProvider(DataProvider):
             WHERE works."Type" = '/type/work'
             AND '{lo_key}' <= works."Key" AND works."Key" <= '{hi_key}'
         """
-        self.query_all(q, json_cache=self.cache)
+        rows = self.query_all(q, json_cache=self.cache)
+        self.cache_redirect_targets(rows)
+
+    def cache_redirect_targets(self, rows: list):
+        """
+        Cache the targets of any redirects among the given ("Key", "JSON") rows,
+        so that following them (e.g. merged authors) doesn't need a query each.
+        Targets that don't exist are cached as deleted.
+        """
+        docs = [row[1] for row in rows]
+        for _ in range(MAX_REDIRECT_HOPS):
+            keys = {loc for doc in docs if doc["type"]["key"] == "/type/redirect" and (loc := doc.get("location")) and loc not in self.cache}
+            if not keys:
+                break
+            keys_sql = ", ".join("'%s'" % key.replace("'", "''") for key in sorted(keys))
+            q = f"""SELECT "Key", "JSON" FROM test WHERE "Key" IN ({keys_sql})"""
+            docs = [row[1] for row in self.query_all(q, json_cache=self.cache)]
+            for key in keys - {doc["key"] for doc in docs}:
+                self.cache[key] = {"key": key, "type": {"key": "/type/delete"}}
 
     def cache_work_ratings(self, lo_key, hi_key):
         q = f"""

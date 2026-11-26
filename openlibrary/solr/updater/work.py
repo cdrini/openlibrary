@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, TypedDict, cast
 import openlibrary.book_providers as bp
 from openlibrary.core import helpers as h
 from openlibrary.plugins.upstream.utils import safeget
-from openlibrary.solr.data_provider import SUPPORTED_WORK_TAG_FIELDS, normalize_tag
+from openlibrary.solr.data_provider import MAX_REDIRECT_HOPS, SUPPORTED_WORK_TAG_FIELDS, normalize_tag
 from openlibrary.solr.solr_types import SolrDocument
 from openlibrary.solr.updater.abstract import AbstractSolrBuilder, AbstractSolrUpdater
 from openlibrary.solr.updater.edition import EditionSolrBuilder, sort_title
@@ -60,6 +60,33 @@ class WorkSolrUpdater(AbstractSolrUpdater):
         self.data_provider.preload_editions_of_works(keys)
         self.data_provider.preload_cover_dimensions()
 
+    async def _get_authors(self, work_key: str, author_keys: list[str]) -> list[dict]:
+        """
+        Fetch the given authors, following redirects (left behind by author
+        merges) the way the website does, and dropping anything that doesn't
+        end up at an author.
+        """
+        authors: list[dict] = []
+        for key in author_keys:
+            doc = await self.data_provider.get_document(key)
+            for _ in range(MAX_REDIRECT_HOPS):
+                if not (doc and doc["type"]["key"] == "/type/redirect" and doc.get("location")):
+                    break
+                doc = await self.data_provider.get_document(doc["location"])
+
+            if doc and doc["type"]["key"] == "/type/author":
+                authors.append(doc)
+            else:
+                # we don't want to raise an exception but just write a warning on the log
+                logger.warning(
+                    "Unexpected author type error: %s -> %s (%s)",
+                    work_key,
+                    key,
+                    doc["type"]["key"] if doc else None,
+                )
+        # Two references can resolve to the same author
+        return uniq(authors, key=lambda a: a["key"])
+
     async def update_key(self, work: dict) -> tuple[SolrUpdateRequest, list[str]]:
         """
         Get the Solr requests necessary to insert/update this work into Solr.
@@ -103,11 +130,7 @@ class WorkSolrUpdater(AbstractSolrUpdater):
 
                 # Fetch authors
                 author_keys = [author["author"]["key"] for author in normalize_authors(work.get("authors", []))]
-                authors = [await self.data_provider.get_document(key) for key in author_keys]
-                if any(a["type"]["key"] != "/type/author" for a in authors):
-                    # we don't want to raise an exception but just write a warning on the log
-                    logger.warning("Unexpected author type error: %s", work["key"])
-                authors = [a for a in authors if a["type"]["key"] == "/type/author"]
+                authors = await self._get_authors(work["key"], author_keys)
 
                 # Fetch tags across all SUPPORTED_WORK_TAG_FIELDS (genres,
                 # subgenres, audiences, content_warnings, content_formats,

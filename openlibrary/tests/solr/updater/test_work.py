@@ -68,6 +68,37 @@ class TestWorkSolrUpdater:
         req, _ = await WorkSolrUpdater(FakeDataProvider([work, make_edition(work), make_edition(work)])).update_key(work)
         assert req.adds[0]["edition_count"] == 2
 
+    @pytest.mark.asyncio
+    async def test_follows_author_redirects(self):
+        author = make_author(name="Real Author")
+        redirect = {"key": "/authors/OL900A", "type": {"key": "/type/redirect"}, "location": author["key"]}
+        redirect2 = {"key": "/authors/OL901A", "type": {"key": "/type/redirect"}, "location": redirect["key"]}
+        other = make_author(name="Other Author")
+        work = make_work(
+            authors=[
+                {"type": {"key": "/type/author_role"}, "author": {"key": redirect2["key"]}},
+                {"type": {"key": "/type/author_role"}, "author": {"key": other["key"]}},
+                # Resolves to the same author as the first one
+                {"type": {"key": "/type/author_role"}, "author": {"key": author["key"]}},
+            ]
+        )
+        dp = FakeDataProvider([work, author, redirect, redirect2, other])
+        req, _ = await WorkSolrUpdater(dp).update_key(work)
+        assert req.adds[0]["author_key"] == [author["key"][len("/authors/") :], other["key"][len("/authors/") :]]
+        assert req.adds[0]["author_name"] == ["Real Author", "Other Author"]
+
+    @pytest.mark.asyncio
+    async def test_drops_unresolvable_authors(self, caplog):
+        author = make_author(name="Real Author")
+        deleted = {"key": "/authors/OL910A", "type": {"key": "/type/delete"}}
+        dangling = {"key": "/authors/OL911A", "type": {"key": "/type/redirect"}, "location": "/authors/OL912A"}
+        loop = {"key": "/authors/OL913A", "type": {"key": "/type/redirect"}, "location": "/authors/OL913A"}
+        work = make_work(authors=[{"type": {"key": "/type/author_role"}, "author": {"key": a["key"]}} for a in (deleted, dangling, loop, author)])
+        dp = FakeDataProvider([work, author, deleted, dangling, loop])
+        req, _ = await WorkSolrUpdater(dp).update_key(work)
+        assert req.adds[0]["author_name"] == ["Real Author"]
+        assert caplog.text.count("Unexpected author type error") == 3
+
 
 def make_work_solr_builder(
     work: dict | None = None,

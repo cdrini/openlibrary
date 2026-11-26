@@ -162,3 +162,31 @@ class TestDatabaseDataProvider:
         await dp.get_document("/works/OL1W")
 
         assert dp.cache[tag_key]["name"] == tag_name
+
+    @pytest.mark.asyncio
+    async def test_preloads_author_redirect_targets(self):
+        mock_site = MagicMock()
+        dp = DatabaseDataProvider(
+            site=mock_site,
+            db=MagicMock(),
+        )
+        docs = [
+            {
+                "key": "/works/OL1W",
+                "type": {"key": "/type/work"},
+                "authors": [{"author": {"key": "/authors/OL1A"}}],
+            },
+            {"key": "/authors/OL1A", "type": {"key": "/type/redirect"}, "location": "/authors/OL2A"},
+            {"key": "/authors/OL2A", "type": {"key": "/type/redirect"}, "location": "/authors/OL3A"},
+            {"key": "/authors/OL3A", "type": {"key": "/type/author"}, "name": "Real Author"},
+        ]
+        docs_by_key = {doc["key"]: Thing(mock_site, doc["key"], doc) for doc in docs}
+        mock_site.get_many.side_effect = lambda keys: [docs_by_key[k] for k in keys if k in docs_by_key]
+
+        await dp.preload_documents(["/works/OL1W"])
+        get_many_calls = mock_site.get_many.call_count
+
+        assert dp.cache["/authors/OL3A"]["name"] == "Real Author"
+        await dp.get_document("/authors/OL1A")
+        await dp.get_document("/authors/OL3A")
+        assert mock_site.get_many.call_count == get_many_calls
