@@ -26,3 +26,9 @@ CREATE TABLE cover (
     height int,
     created date
 );
+
+-- archive.org metadata from solr_builder/ia_export.py; empty if the export was skipped
+CREATE TABLE ia_metadata (
+    identifier text NOT NULL,
+    "JSON" jsonb NOT NULL
+);

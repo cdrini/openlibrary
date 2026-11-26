@@ -7,5 +7,7 @@ CREATE INDEX test_JSON_works ON test (("JSON" -> 'works' -> 0 ->> 'key')) WHERE 
 CREATE INDEX test_orphans_Key ON test ("Key") WHERE "Type" = '/type/edition' AND "JSON" -> 'works' -> 0 ->> 'key' IS NULL; -- 25min (23 Mar 2021, OJF)
 CREATE INDEX test_Type_Key ON test ("Type", "Key"); -- 21 min (10 May 2019, OJF)
 CREATE INDEX cover_id ON cover (id);
+-- Not unique, so a stray duplicate from the export cannot fail this whole stage
+CREATE INDEX ia_metadata_identifier ON ia_metadata (identifier);
 
 -- NET: 1.25 hr (10 May 2019, OJF)
