@@ -5,7 +5,7 @@ import logging
 import time
 import uuid
 from collections import namedtuple
-from collections.abc import Awaitable, Iterator
+from collections.abc import Awaitable, Iterable, Iterator
 from configparser import ConfigParser
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -247,8 +247,10 @@ class LocalPostgresDataProvider(DataProvider):
             self.ia_cache.update(cur.fetchall())
         cur.close()
 
-    async def cache_cached_editions_ia_metadata(self):
-        ocaids = list({doc["ocaid"] for doc in self.cache.values() if "ocaid" in doc})
+    async def cache_cached_editions_ia_metadata(self, docs: Iterable[dict] | None = None):
+        """:param docs: Editions to cache metadata for; defaults to this provider's cache"""
+        docs = self.cache.values() if docs is None else docs
+        ocaids = list({doc["ocaid"] for doc in docs if "ocaid" in doc})
         self.cache_ia_metadata_from_export(ocaids)
         missing = [ocaid for ocaid in ocaids if ocaid not in self.ia_cache]
         logger.info("IA metadata: %d from export, %d to fetch", len(ocaids) - len(missing), len(missing))
@@ -607,8 +609,8 @@ async def main(  # noqa: PLR0917 - CLI entrypoint with many optional flags
                     db2.cache_work_ratings(*key_range)
                     db2.cache_work_reading_logs(*key_range)
                 elif job == "orphans":
-                    # cache editions' ocaid metadata
-                    ocaids_time, _ = await simple_timeit_async(db2.cache_cached_editions_ia_metadata())
+                    # cache editions' ocaid metadata; the orphans themselves are in db's cache
+                    ocaids_time, _ = await simple_timeit_async(db2.cache_cached_editions_ia_metadata(db.cache.values()))
                     plog.update(
                         q_ia=plog.last_entry.q_ia + ocaids_time,
                         ia_cache=len(db2.ia_cache),

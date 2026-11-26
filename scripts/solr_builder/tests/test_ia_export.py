@@ -226,6 +226,15 @@ class TestExportLookup:
         if table_rows is None:
             assert len(cursor.queries) == 1
 
+    @pytest.mark.asyncio
+    async def test_given_docs(self, provider, monkeypatch):
+        _, fetched = setup_provider(provider, monkeypatch, [ITEM_B])
+
+        await provider.cache_cached_editions_ia_metadata([{"ocaid": "bbb00"}, {"ocaid": "yyy00"}, {}])
+
+        assert fetched == [["yyy00"]]
+        assert set(provider.ia_cache) == {"bbb00", "yyy00"}
+
 
 def test_lite_metadata_parity():
     # Shapes as returned by the scrape API, which match advancedsearch's docs
