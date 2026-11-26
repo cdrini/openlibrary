@@ -235,9 +235,24 @@ class LocalPostgresDataProvider(DataProvider):
         """
         self.query_all(q, json_cache=self.cached_work_reading_logs)
 
+    def cache_ia_metadata_from_export(self, ocaids: list[str]) -> None:
+        """Fill ia_cache from the `ia_metadata` table, if the IA export was loaded."""
+        ocaids = [ocaid for ocaid in ocaids if isinstance(ocaid, str)]
+        if not ocaids:
+            return
+        cur = self._conn.cursor()
+        cur.execute("SELECT to_regclass('ia_metadata')")
+        if cur.fetchone()[0] is not None:
+            cur.execute('SELECT identifier, "JSON" FROM ia_metadata WHERE identifier = ANY(%s)', (ocaids,))
+            self.ia_cache.update(cur.fetchall())
+        cur.close()
+
     async def cache_cached_editions_ia_metadata(self):
         ocaids = list({doc["ocaid"] for doc in self.cache.values() if "ocaid" in doc})
-        await self.preload_metadata(ocaids)
+        self.cache_ia_metadata_from_export(ocaids)
+        missing = [ocaid for ocaid in ocaids if ocaid not in self.ia_cache]
+        logger.info("IA metadata: %d from export, %d to fetch", len(ocaids) - len(missing), len(missing))
+        await self.preload_metadata(missing)
 
     def find_redirects(self, key):
         """Returns keys of all things which redirect to this one."""

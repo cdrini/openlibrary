@@ -6,6 +6,7 @@ import pytest
 
 from openlibrary.solr.updater.work import full_ia_metadata_to_lite_metadata
 from scripts.solr_builder.solr_builder import ia_export
+from scripts.solr_builder.solr_builder.solr_builder import LocalPostgresDataProvider
 
 ITEM_A = {
     "identifier": "aaa00",
@@ -150,6 +151,80 @@ class TestMain:
 
         assert len(fake.requests) == 1
         assert len(read_output(out)) == 1
+
+
+class FakeCursor:
+    def __init__(self, table_rows):
+        self.table_rows = table_rows
+        self.queries = []
+        self.result = []
+
+    def execute(self, q, params=None):
+        self.queries.append(q)
+        if "to_regclass" in q:
+            self.result = [("ia_metadata" if self.table_rows is not None else None,)]
+        else:
+            self.result = [(row["identifier"], row) for row in self.table_rows or [] if row["identifier"] in params[0]]
+
+    def fetchone(self):
+        return self.result[0]
+
+    def fetchall(self):
+        return self.result
+
+    def close(self):
+        pass
+
+
+@pytest.fixture
+def provider(tmp_path):
+    conf = tmp_path / "db.ini"
+    conf.write_text("[postgres]\nhost=localhost\n")
+    return LocalPostgresDataProvider(str(conf))
+
+
+def setup_provider(provider, monkeypatch, table_rows):
+    cursor = FakeCursor(table_rows)
+    provider._conn = type("FakeConn", (), {"cursor": lambda self: cursor})()
+    fetched = []
+
+    async def fake_preload(ocaids):
+        fetched.append(sorted(ocaids))
+        for ocaid in ocaids:
+            provider.ia_cache[ocaid] = {"identifier": ocaid, "collection": "fetched"}
+
+    monkeypatch.setattr(provider, "preload_metadata", fake_preload)
+    provider.cache.update(
+        {
+            "/books/OL1M": {"key": "/books/OL1M", "ocaid": "aaa00"},
+            "/books/OL2M": {"key": "/books/OL2M", "ocaid": "zzz00"},
+            "/books/OL3M": {"key": "/books/OL3M"},
+        }
+    )
+    return cursor, fetched
+
+
+class TestExportLookup:
+    @pytest.mark.asyncio
+    async def test_only_fetches_missing(self, provider, monkeypatch):
+        _, fetched = setup_provider(provider, monkeypatch, [ITEM_A, ITEM_B])
+
+        await provider.cache_cached_editions_ia_metadata()
+
+        assert fetched == [["zzz00"]]
+        assert provider.ia_cache["aaa00"] == ITEM_A
+        assert provider.ia_cache["zzz00"]["collection"] == "fetched"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("table_rows", [None, []], ids=["no table", "empty table"])
+    async def test_without_export_fetches_all(self, provider, monkeypatch, table_rows):
+        cursor, fetched = setup_provider(provider, monkeypatch, table_rows)
+
+        await provider.cache_cached_editions_ia_metadata()
+
+        assert fetched == [["aaa00", "zzz00"]]
+        if table_rows is None:
+            assert len(cursor.queries) == 1
 
 
 def test_lite_metadata_parity():
